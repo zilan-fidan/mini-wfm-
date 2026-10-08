@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: mini-wfm-postgres
+
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mini_wfm
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - mini_wfm_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  mini_wfm_postgres_data:
+
