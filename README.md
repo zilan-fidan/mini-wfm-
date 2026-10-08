@@ -131,3 +131,60 @@ Controller, service ve diğer modüllerin NestJS uygulamasına tanıtıldığı 
 ### `app.controller.ts`
 
 Gelen HTTP isteklerini karşılayan kat
+## PostgreSQL Veritabanını Başlatma
+
+PostgreSQL veritabanı Docker Compose ile çalıştırılmaktadır.
+
+Öncelikle proje kök dizinine geçin:
+
+```bash
+cd ~/mini-wfm
+```
+
+PostgreSQL container'ını arka planda başlatmak için:
+
+```bash
+docker compose up -d
+```
+
+Container'ın çalıştığını kontrol etmek için:
+
+```bash
+docker ps
+```
+
+Başarılı durumda `mini-wfm-postgres` container'ı görünmelidir.
+
+PostgreSQL bağlantı bilgileri:
+
+```text
+Host: localhost
+Port: 5433
+Database: mini_wfm
+Username: postgres
+Password: postgres
+```
+
+DBeaver veya başka bir veritabanı aracı ile bu bilgiler kullanılarak bağlantı kurulabilir.
+
+PostgreSQL container'ını durdurmak ve kaldırmak için:
+
+```bash
+docker compose down
+```
+
+Bu komut container'ı kaldırır ancak Docker volume'ünü silmez. Bu nedenle veritabanı verileri korunur.
+
+Veritabanını tekrar başlatmak için:
+
+```bash
+docker compose up -d
+```
+
+Container loglarını görmek için:
+
+```bash
+docker compose logs -f postgres
+```
+
+> Not: `docker compose down -v` komutu volume'leri de siler. Bu komut kullanılırsa PostgreSQL verileri kaybolabilir.
