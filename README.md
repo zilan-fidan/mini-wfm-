@@ -4,27 +4,45 @@ Mini WFM, tek bir Git reposu içerisinde iki ayrı NestJS uygulaması barındır
 
 ## Mevcut Durum
 
-Projenin temel geliştirme ortamı hazırlanmıştır.
+### Geliştirme ortamı
 
-Şu ana kadar:
-
-- Node.js LTS kurulmuştur.
-- pnpm kurulmuştur.
-- Nest CLI kurulmuştur.
-- Docker Desktop kurulmuştur.
-- Git kurulmuş ve proje için tek bir repository oluşturulmuştur.
-- `mini-wfm` ana klasörü oluşturulmuştur.
-- `api` ve `workforce-service` olmak üzere iki ayrı NestJS projesi oluşturulmuştur.
+- Node.js LTS, pnpm, Nest CLI, Docker Desktop ve Git kurulmuştur.
+- `mini-wfm` ana klasörü altında `api` ve `workforce-service` olmak üzere iki ayrı NestJS projesi bulunmaktadır.
 - Her iki projede paket yöneticisi olarak `pnpm` kullanılmaktadır.
-- Alt projelerin kendi Git repository'leri oluşturulmamıştır.
-- Her iki proje aynı ana Git repository altında tutulmaktadır.
-- `api` servisi `3000` portunda çalışmaktadır.
-- `workforce-service` servisi `3001` portunda çalışmaktadır.
-- Her iki servis aynı anda çalıştırılıp test edilmiştir.
-- `http://localhost:3000` ve `http://localhost:3001` adreslerinde `Hello World!` çıktısı doğrulanmıştır.
-- `.gitignore` dosyası hazırlanmıştır.
-- `node_modules`, `dist`, `.env` ve TypeScript build cache dosyaları Git takibinden çıkarılmıştır.
-- İlk proje kurulumu Git commit'i oluşturulmuştur.
+- Alt projelerin kendi Git repository'leri yoktur; ikisi de aynı ana repository altında tutulmaktadır.
+- `.gitignore` hazırlanmıştır. `node_modules`, `dist`, `.env` ve TypeScript build cache dosyaları Git takibinden çıkarılmıştır.
+- PostgreSQL, Docker Compose ile çalıştırılmaktadır (bkz. [PostgreSQL Veritabanını Başlatma](#postgresql-veritabanını-başlatma)).
+
+### WFM-4: api ile workforce-service bağlantısı
+
+- `workforce-service`, HTTP uygulaması olmaktan çıkarılıp `4001` portunu dinleyen bir **TCP microservice**'e dönüştürülmüştür.
+- Varsayılan HTTP controller ve service dosyaları (`app.controller.ts`, `app.controller.spec.ts`, `app.service.ts`) kaldırılmıştır.
+- `workforce-service` içine `ping` pattern'i eklenmiştir; `pong` döndürür.
+- `api` içinde `workforce-service`'e bağlanan bir **TCP client** (`ClientsModule`) tanımlanmıştır.
+- `api` içindeki tüm endpoint'ler `/api` önekiyle başlar (global prefix).
+- `api` içinde global `ValidationPipe` kurulmuştur:
+  - `whitelist: true`: DTO'da tanımlı olmayan alanlar atılır.
+  - `transform: true`: Gelen veri DTO sınıfına dönüştürülür.
+  - Bunun için `class-validator` ve `class-transformer` kullanılır.
+- `api` içinde **Swagger**, `/docs` adresinde açılmıştır.
+- `GET /api/health` endpoint'i eklenmiştir. Bu endpoint `workforce-service`'e `ping` mesajı gönderir ve gelen yanıtı (`pong`) döndürür.
+- Bağlantı, Swagger üzerinden `GET /api/health` çalıştırılarak doğrulanmıştır: yanıt `pong`.
+
+## Mimari
+
+```text
+Tarayıcı / Swagger
+        │  HTTP (3000)
+        ▼
+      api  ──────────────  TCP (4001)  ──────────────►  workforce-service
+  (dış dünyaya açık)         "ping"                     (iş mantığı, veritabanı)
+        ▲                                                      │
+        └──────────────────────  "pong"  ◄─────────────────────┘
+```
+
+- **api**: Dış dünyaya açılan HTTP katmanıdır. İşi kendisi yapmaz, `workforce-service`'e mesaj gönderir.
+- **workforce-service**: HTTP dinlemez. Yalnızca TCP üzerinden gelen mesajları, `@MessagePattern` ile tanımlanmış pattern'lere göre işler.
+- `send(pattern, data)` istek-yanıt modelidir: cevap beklenir. `emit(pattern, data)` ise cevap beklemeyen olay bildirimidir.
 
 ## Proje Yapısı
 
@@ -33,20 +51,23 @@ mini-wfm/
 ├── .git/
 ├── .gitignore
 ├── README.md
+├── docker-compose.yml
 ├── api/
 │   ├── src/
-│   │   ├── main.ts
-│   │   ├── app.module.ts
-│   │   ├── app.controller.ts
-│   │   └── app.service.ts
+│   │   ├── main.ts               # global prefix, ValidationPipe, Swagger
+│   │   ├── app.module.ts         # ClientsModule (TCP client)
+│   │   ├── constants.ts          # WORKFORCE_SERVICE token'ı
+│   │   └── health/
+│   │       └── health.controller.ts   # GET /api/health
 │   ├── package.json
 │   └── pnpm-lock.yaml
 └── workforce-service/
     ├── src/
-    │   ├── main.ts
-    │   ├── app.module.ts
-    │   ├── app.controller.ts
-    │   └── app.service.ts
+    │   ├── main.ts               # TCP microservice (4001)
+    │   ├── app.module.ts         # ConfigModule, TypeOrmModule, HealthController
+    │   ├── health/
+    │   │   └── health.controller.ts   # @MessagePattern('ping')
+    │   └── migrations/
     ├── package.json
     └── pnpm-lock.yaml
 ```
@@ -55,13 +76,14 @@ mini-wfm/
 
 ### API
 
-Ana HTTP API servisidir.
+Dış dünyaya açık HTTP API servisidir.
 
-Port:
-
-```text
-3000
-```
+| | |
+|---|---|
+| Port | `3000` |
+| Önek | `/api` |
+| Swagger | `http://localhost:3000/docs` |
+| Health | `http://localhost:3000/api/health` |
 
 Çalıştırmak için:
 
@@ -70,23 +92,20 @@ cd ~/mini-wfm/api
 pnpm run start:dev
 ```
 
-Adres:
-
-```text
-http://localhost:3000
-```
-
 ### Workforce Service
 
-Workforce işlemleri için oluşturulan ikinci NestJS servisidir.
+Workforce işlemleri için oluşturulan TCP microservice'tir. HTTP üzerinden erişilemez; tarayıcıdan `localhost:4001` adresine girmek anlamsızdır.
 
-Şimdilik HTTP üzerinden çalışmaktadır. İlerleyen aşamalarda TCP microservice yapısına dönüştürülecektir.
+| | |
+|---|---|
+| Transport | TCP |
+| Port | `4001` |
 
-Port:
+Desteklenen mesaj pattern'leri:
 
-```text
-3001
-```
+| Pattern | Yanıt | Açıklama |
+|---|---|---|
+| `ping` | `pong` | Bağlantı testi |
 
 Çalıştırmak için:
 
@@ -95,21 +114,48 @@ cd ~/mini-wfm/workforce-service
 pnpm run start:dev
 ```
 
-Adres:
+Başarılı açılışta terminalde `Nest microservice successfully started` görülür.
 
-```text
-http://localhost:3001
+## Servisleri Birlikte Çalıştırma ve Test Etme
+
+Sıra önemlidir: önce `workforce-service`, sonra `api` başlatılmalıdır. İki ayrı terminal kullanın.
+
+```bash
+# Terminal 1
+cd ~/mini-wfm/workforce-service
+pnpm run start:dev
+
+# Terminal 2
+cd ~/mini-wfm/api
+pnpm run start:dev
 ```
+
+Bağlantıyı doğrulamak için:
+
+1. Tarayıcıda `http://localhost:3000/docs` adresini açın.
+2. **health** grubunda `GET /api/health` endpoint'ini bulun.
+3. **Try it out** → **Execute** adımlarını izleyin.
+4. Yanıt `pong` olmalıdır.
+
+### Sık karşılaşılan hatalar
+
+| Hata | Olası neden |
+|---|---|
+| `ECONNREFUSED 127.0.0.1:4001` | `workforce-service` çalışmıyor veya port 4001 değil |
+| `There is no matching message handler defined in the remote service` | `workforce-service` içindeki `HealthController` modülün `controllers` dizisine eklenmemiş veya pattern adı (`'ping'`) iki tarafta farklı |
+| Swagger'da istek sonsuza kadar bekliyor | `api` tarafında `firstValueFrom` kullanılmamış; `send()` yalnızca abone olunduğunda mesajı gönderir |
+| `Nest can't resolve dependencies of the HealthController` | `ClientsModule.register` içindeki `name` ile `@Inject` edilen token aynı değil |
 
 ## Kullanılan Teknolojiler
 
 - Node.js 24 LTS
-- npm
 - pnpm
-- NestJS
+- NestJS (`@nestjs/microservices`, `@nestjs/swagger`, `@nestjs/config`)
 - TypeScript
-- Git
-- GitHub
+- class-validator ve class-transformer
+- TypeORM ve PostgreSQL
+- Swagger (OpenAPI)
+- Git ve GitHub
 - Docker Desktop
 - DBeaver
 - Postman
@@ -120,17 +166,22 @@ http://localhost:3001
 
 NestJS uygulamasının başlangıç noktasıdır.
 
-`NestFactory` kullanılarak uygulama oluşturulur ve belirlenen port üzerinden çalıştırılır.
+- `api` içinde `NestFactory.create` ile HTTP uygulaması oluşturulur; global prefix, `ValidationPipe` ve Swagger burada ayarlanır.
+- `workforce-service` içinde `NestFactory.createMicroservice` ile TCP microservice oluşturulur.
 
 ### `app.module.ts`
 
-Uygulamanın ana modülüdür.
+Uygulamanın ana modülüdür. Controller, provider ve diğer modüllerin NestJS uygulamasına tanıtıldığı yerdir. Bir controller `controllers` dizisine eklenmediyse Nest onu görmez.
 
-Controller, service ve diğer modüllerin NestJS uygulamasına tanıtıldığı yerdir.
+### `*.controller.ts`
 
-### `app.controller.ts`
+- `api` içinde `@Controller` + `@Get` gibi dekoratörlerle gelen **HTTP isteklerini** karşılar.
+- `workforce-service` içinde `@MessagePattern` ile gelen **TCP mesajlarını** karşılar.
 
-Gelen HTTP isteklerini karşılayan kat
+### `constants.ts` (api)
+
+TCP client'ın token'ını (`WORKFORCE_SERVICE`) tutar. `app.module.ts` ile controller arasında döngüsel import oluşmaması için ayrı bir dosyadadır.
+
 ## PostgreSQL Veritabanını Başlatma
 
 PostgreSQL veritabanı Docker Compose ile çalıştırılmaktadır.
@@ -188,3 +239,5 @@ docker compose logs -f postgres
 ```
 
 > Not: `docker compose down -v` komutu volume'leri de siler. Bu komut kullanılırsa PostgreSQL verileri kaybolabilir.
+
+> Not: `workforce-service` açılırken veritabanına bağlanır ve migration'ları çalıştırır. Bu yüzden servisi başlatmadan önce veritabanı container'ının ayakta olduğundan emin olun.
