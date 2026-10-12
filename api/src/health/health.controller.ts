@@ -16,4 +16,10 @@ export class HealthController {
   ping() {
     return firstValueFrom(this.client.send({ cmd: 'health' }, {}));
   }
+
+  // GEÇİCİ: sonra silinecek
+  @Get('debug-404')
+  debug() {
+    return firstValueFrom(this.client.send({ cmd: 'debug.not-found' }, {}));
+  }
 }
