@@ -1,10 +1,11 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { RpcException } from '@nestjs/microservices';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, ILike, Repository } from 'typeorm';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { UpdateTeamDto } from './dto/update-team.dto';
 import { Team } from './entities/team.entity';
+import { FindAllTeamsDto } from './dto/find-all-teams.dto';
 
 @Injectable()
 export class TeamsService {
@@ -42,9 +43,28 @@ export class TeamsService {
     return team;
   }
 
-  findAll() {
-    return `This action returns all teams`;
+  async findAll(query: FindAllTeamsDto) {
+  const { page = 1, limit = 10, search, isActive } = query;
+
+  const where: FindOptionsWhere<Team> = {};
+
+  if (search) {
+    where.name = ILike(`%${search}%`);
   }
+
+  if (isActive !== undefined) {
+    where.isActive = isActive;
+  }
+
+  const [items, total] = await this.teamRepository.findAndCount({
+    where,
+    order: { createdAt: 'DESC', id: 'DESC' },
+    skip: (page - 1) * limit,
+    take: limit,
+  });
+
+  return { items, total, page, limit };
+}
 
   async update(id: number, updateTeamDto: UpdateTeamDto): Promise<Team> {
   const team = await this.findOne(id); // ekip yoksa zaten 404 fırlatır
