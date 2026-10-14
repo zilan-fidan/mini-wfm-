@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { WORKFORCE_SERVICE } from './constants';
 import { HealthController } from './health/health.controller';
+import { TeamsModule } from './teams/teams.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { HealthController } from './health/health.controller';
         options: { host: 'localhost', port: 4001 },
       },
     ]),
+    TeamsModule,
   ],
   controllers: [HealthController],
 })
