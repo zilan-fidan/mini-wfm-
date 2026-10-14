@@ -3,8 +3,8 @@ import { MessagePattern } from '@nestjs/microservices';
 
 @Controller()
 export class HealthController {
-  @MessagePattern('ping')
-  ping(): string {
+  @MessagePattern({ cmd: 'health' })
+  health() {
     return 'pong';
   }
 }

@@ -1,6 +1,6 @@
 import { Controller, Get, Inject } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { firstValueFrom } from 'rxjs';
 import { WORKFORCE_SERVICE } from '../constants';
 
@@ -12,8 +12,8 @@ export class HealthController {
   ) {}
 
   @Get()
-  @ApiOkResponse({ description: 'workforce-service yanıtı', type: String })
-  async check(): Promise<string> {
-    return firstValueFrom(this.client.send<string>('ping', {}));
+  @ApiOperation({ summary: 'workforce-service sağlık kontrolü' })
+  ping() {
+    return firstValueFrom(this.client.send({ cmd: 'health' }, {}));
   }
 }
