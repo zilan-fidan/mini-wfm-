@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import { HealthController } from './health/health.controller';
+import { TeamsModule } from './teams/teams.module';
 
 @Module({
   imports: [
@@ -31,6 +32,8 @@ import { HealthController } from './health/health.controller';
         migrationsRun: true,
       }),
     }),
+
+    TeamsModule,
   ],
 
 
