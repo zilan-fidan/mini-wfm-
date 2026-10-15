@@ -46,11 +46,28 @@ export class TeamsService {
     return `This action returns all teams`;
   }
 
-  update(id: number, updateTeamDto: UpdateTeamDto) {
-    return `This action updates a #${id} team`;
+  async update(id: number, updateTeamDto: UpdateTeamDto): Promise<Team> {
+  const team = await this.findOne(id); // ekip yoksa zaten 404 fırlatır
+
+  if (updateTeamDto.name !== undefined && updateTeamDto.name !== team.name) {
+    const duplicate = await this.teamRepository.findOne({
+      where: { name: updateTeamDto.name },
+    });
+
+    if (duplicate) {
+      throw new RpcException({
+        statusCode: HttpStatus.CONFLICT,
+        message: 'Bu isimde bir ekip zaten var',
+      });
+    }
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} team`;
-  }
+  Object.assign(team, updateTeamDto);
+  return this.teamRepository.save(team);
+}
+
+async remove(id: number): Promise<void> {
+  const team = await this.findOne(id); // ekip yoksa 404
+  await this.teamRepository.remove(team);
+}
 }

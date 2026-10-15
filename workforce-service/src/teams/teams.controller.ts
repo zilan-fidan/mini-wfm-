@@ -24,9 +24,9 @@ export class TeamsController {
   }
 
   @MessagePattern('updateTeam')
-  update(@Payload() updateTeamDto: UpdateTeamDto) {
-    return this.teamsService.update(updateTeamDto.id, updateTeamDto);
-  }
+  update(@Payload() payload: { id: number; data: UpdateTeamDto }) {
+   return this.teamsService.update(payload.id, payload.data);
+  } 
 
   @MessagePattern('removeTeam')
   remove(@Payload() id: number) {
