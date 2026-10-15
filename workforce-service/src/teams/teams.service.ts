@@ -63,7 +63,7 @@ export class TeamsService {
     take: limit,
   });
 
-  return { items, total, page, limit };
+  return { data: items, total, page, limit };
 }
 
   async update(id: number, updateTeamDto: UpdateTeamDto): Promise<Team> {
