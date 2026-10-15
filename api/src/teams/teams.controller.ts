@@ -1,8 +1,9 @@
-import {Body,Controller,Delete,Get,Inject,Param,ParseIntPipe,Patch,Post,} from '@nestjs/common';
+import {Body,Controller,Delete,Get,Inject,Param,ParseIntPipe,Patch,Post,Query,} from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {ApiBadRequestResponse,ApiConflictResponse,ApiCreatedResponse,ApiNotFoundResponse,ApiOkResponse, ApiOperation,ApiParam,ApiTags} from '@nestjs/swagger';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { UpdateTeamDto } from './dto/update-team.dto';
+import { ListTeamsQueryDto } from './dto/list-teams-query.dto';
 
 @ApiTags('teams')
 @Controller('teams')
@@ -17,6 +18,14 @@ export class TeamsController {
   @ApiBadRequestResponse({ description: 'Geçersiz veri' })
   @ApiConflictResponse({ description: 'Bu isimde bir ekip zaten var' })
   create(@Body() dto: CreateTeamDto) {return this.client.send('createTeam', dto);}
+
+  @Get()
+  @ApiOperation({ summary: 'Ekipleri sayfalı olarak listeler' })
+  @ApiOkResponse({ description: 'Ekip listesi' })
+  @ApiBadRequestResponse({ description: 'Geçersiz query parametresi' })
+  findAll(@Query() query: ListTeamsQueryDto) {
+    return this.client.send('findAllTeams', query);
+  }
 
   @Get(':id')
   @ApiOperation({ summary: 'Ekip detayını getirir' })
