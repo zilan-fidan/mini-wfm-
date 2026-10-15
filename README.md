@@ -241,3 +241,6 @@ docker compose logs -f postgres
 > Not: `docker compose down -v` komutu volume'leri de siler. Bu komut kullanılırsa PostgreSQL verileri kaybolabilir.
 
 > Not: `workforce-service` açılırken veritabanına bağlanır ve migration'ları çalıştırır. Bu yüzden servisi başlatmadan önce veritabanı container'ının ayakta olduğundan emin olun.
+
+
+gereksinimler ve çalıştırma (cd web && pnpm install && pnpm dev, adres http://localhost:5173, API’nin 3000’de açık olması gerektiği).
