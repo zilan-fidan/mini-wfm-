@@ -4,6 +4,7 @@ import {ApiBadRequestResponse,ApiConflictResponse,ApiCreatedResponse,ApiNotFound
 import { CreateTeamDto } from './dto/create-team.dto';
 import { UpdateTeamDto } from './dto/update-team.dto';
 import { ListTeamsQueryDto } from './dto/list-teams-query.dto';
+import { defaultIfEmpty, map } from 'rxjs';
 
 @ApiTags('teams')
 @Controller('teams')
@@ -56,6 +57,9 @@ export class TeamsController {
   @ApiBadRequestResponse({ description: 'id sayı değil' })
   @ApiNotFoundResponse({ description: 'Ekip bulunamadı' })
   remove(@Param('id', ParseIntPipe) id: number) {
-    return this.client.send('removeTeam', id);
-  }
+  return this.client.send('removeTeam', id).pipe(
+    defaultIfEmpty(null),
+    map(() => undefined),
+  );
+}
 }

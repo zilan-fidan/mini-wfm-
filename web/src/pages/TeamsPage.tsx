@@ -1,10 +1,10 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState} from 'react';
-import { Button, Flex , Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { Button, Flex, Input, Popconfirm, Select, Space,  Switch,Table, Tag, Typography, message  } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { Link } from 'react-router';
-import { listTeams } from '../api/teams.api';
+import { deleteTeam, listTeams,updateTeam} from '../api/teams.api';
 import type { Team } from '../types/team';
 import TeamFormModal from '../components/TeamFormModal';
 
@@ -16,7 +16,8 @@ const statusToIsActive = (status: StatusFilter): boolean | undefined => {
   return undefined; // 'all': filtre yok
 };
 
-const getColumns = (onEdit: (team: Team) => void): ColumnsType<Team> => [
+const getColumns = (onEdit: (team: Team) => void,onDelete: (team: Team) => void,onToggle: (team: Team, checked: boolean) => void,
+  isToggling: (team: Team) => boolean,): ColumnsType<Team> => [
   {
     title: 'Ekip Adı',
     dataIndex: 'name',
@@ -30,12 +31,19 @@ const getColumns = (onEdit: (team: Team) => void): ColumnsType<Team> => [
     render: (description: string | null) => description || '-',
   },
   {
-    title: 'Durum',
-    dataIndex: 'isActive',
-    key: 'isActive',
-    render: (isActive: boolean) =>
-      isActive ? <Tag color="green">Aktif</Tag> : <Tag color="default">Pasif</Tag>,
-  },
+  title: 'Durum',
+  dataIndex: 'isActive',
+  key: 'isActive',
+  render: (isActive: boolean, record) => (
+    <Switch
+      checked={isActive}
+      checkedChildren="Aktif"
+      unCheckedChildren="Pasif"
+      loading={isToggling(record)}
+      onChange={(checked) => onToggle(record, checked)}
+    />
+  ),
+},
   {
     title: 'Oluşturulma',
     dataIndex: 'createdAt',
@@ -50,9 +58,17 @@ const getColumns = (onEdit: (team: Team) => void): ColumnsType<Team> => [
         <Button size="small" onClick={() => onEdit(record)}>
           Düzenle
         </Button>
-        <Button size="small" danger>
-          Sil
-        </Button>
+       <Popconfirm
+  title="Ekibi silmek istediğinize emin misiniz?"
+  okText="Evet, Sil"
+  cancelText="Vazgeç"
+  okButtonProps={{ danger: true }}
+  onConfirm={() => onDelete(record)}
+>
+  <Button size="small" danger>
+    Sil
+  </Button>
+</Popconfirm>
       </Space>
     ),
   },
@@ -91,6 +107,28 @@ const getColumns = (onEdit: (team: Team) => void): ColumnsType<Team> => [
       }),
     placeholderData: keepPreviousData,
   });
+  const queryClient = useQueryClient();
+
+const deleteMutation = useMutation({
+  mutationFn: (team: Team) => deleteTeam(team.id),
+  onSuccess: () => {
+  console.log('silme başarılı');
+  message.success('Ekip silindi');
+    // Sayfadaki son kayıt silindiyse bir önceki sayfaya dön
+    if ((data?.data.length ?? 0) === 1 && page > 1) {
+      setPage(page - 1);
+    }
+    queryClient.invalidateQueries({ queryKey: ['teams'] });
+  },
+});
+const toggleMutation = useMutation({
+  mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) =>
+    updateTeam(id, { isActive }),
+  onSuccess: () => {
+    message.success('Ekip durumu güncellendi');
+    queryClient.invalidateQueries({ queryKey: ['teams'] });
+  },
+});
 
   return (
     <>
@@ -134,10 +172,15 @@ const getColumns = (onEdit: (team: Team) => void): ColumnsType<Team> => [
 
       <Table<Team>
         rowKey="id"
-        columns={getColumns((team) => {
-          setEditingTeam(team);
-          setModalOpen(true);
-        })}
+        columns={getColumns(
+  (team) => {
+    setEditingTeam(team);
+    setModalOpen(true);
+  },
+  (team) => deleteMutation.mutate(team),
+  (team, checked) => toggleMutation.mutate({ id: team.id, isActive: checked }),
+  (team) => toggleMutation.isPending && toggleMutation.variables?.id === team.id,
+)}
         dataSource={data?.data}
         loading={isFetching}
         locale={{ emptyText: 'Kayıt bulunamadı' }}
