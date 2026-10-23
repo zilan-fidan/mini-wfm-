@@ -6,6 +6,7 @@ import dayjs from 'dayjs';
 import { Link } from 'react-router';
 import { listTeams } from '../api/teams.api';
 import type { Team } from '../types/team';
+import TeamFormModal from '../components/TeamFormModal';
 
 type StatusFilter = 'all' | 'active' | 'inactive';
 
@@ -15,7 +16,7 @@ const statusToIsActive = (status: StatusFilter): boolean | undefined => {
   return undefined; // 'all': filtre yok
 };
 
-const columns: ColumnsType<Team> = [
+const getColumns = (onEdit: (team: Team) => void): ColumnsType<Team> => [
   {
     title: 'Ekip Adı',
     dataIndex: 'name',
@@ -44,9 +45,11 @@ const columns: ColumnsType<Team> = [
   {
     title: 'İşlemler',
     key: 'actions',
-    render: () => (
+    render: (_, record) => (
       <Space>
-        <Button size="small">Düzenle</Button>
+        <Button size="small" onClick={() => onEdit(record)}>
+          Düzenle
+        </Button>
         <Button size="small" danger>
           Sil
         </Button>
@@ -62,6 +65,8 @@ const columns: ColumnsType<Team> = [
   const [status, setStatus] = useState<StatusFilter>('all');
   const [searchInput, setSearchInput] = useState(''); // kutudaki anlık yazı
   const [search, setSearch] = useState(''); // debounce'tan geçmiş, API'ye giden
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
 
   // searchInput değişince 400 ms bekle, sessizlik olursa search'i güncelle
   useEffect(() => {
@@ -93,7 +98,15 @@ const columns: ColumnsType<Team> = [
   <Typography.Title level={2} style={{ margin: 0 }}>
     Ekipler
   </Typography.Title>
-  <Button type="primary">Yeni Ekip</Button>
+  <Button
+  type="primary"
+  onClick={() => {
+    setEditingTeam(null);
+    setModalOpen(true);
+  }}
+>
+  Yeni Ekip
+</Button>
 </Flex>
 
       <Space style={{ marginBottom: 16 }}>
@@ -121,9 +134,13 @@ const columns: ColumnsType<Team> = [
 
       <Table<Team>
         rowKey="id"
-        columns={columns}
+        columns={getColumns((team) => {
+          setEditingTeam(team);
+          setModalOpen(true);
+        })}
         dataSource={data?.data}
         loading={isFetching}
+        locale={{ emptyText: 'Kayıt bulunamadı' }}
         pagination={{
           current: page,
           pageSize,
@@ -139,7 +156,12 @@ const columns: ColumnsType<Team> = [
             }
           },
         }}
-      />
+      /><TeamFormModal
+  open={modalOpen}
+  team={editingTeam}
+  onClose={() => setModalOpen(false)}
+  onCreated={() => setPage(1)}
+/>
     </>
   );
 }
