@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import { HealthController } from './health/health.controller';
 import { TeamsModule } from './teams/teams.module';
+import { PersonelModule } from './personel/personel.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { TeamsModule } from './teams/teams.module';
     }),
 
     TeamsModule,
+    PersonelModule,
   ],
 
 
