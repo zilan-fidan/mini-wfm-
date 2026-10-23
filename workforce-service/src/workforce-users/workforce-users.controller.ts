@@ -1,19 +1,19 @@
 import { Controller, HttpStatus } from '@nestjs/common';
 import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
-import { PersonelService } from './personel.service';
-import { CreatedWorkforceUserDto } from './dto/create-personel.dto';
-import { UpdateWorkforceUserDto } from './dto/update-personel.dto';
-import { FindAllWorkforceUsersDto } from './dto/find-all-personel.dto';
+import { WorkforceUsersService } from './workforce-users.service';
+import { CreateWorkforceUserDto } from './dto/create-workforce-user.dto';
+import { UpdateWorkforceUserDto } from './dto/update-workforce-user.dto';
+import { FindAllWorkforceUsersDto } from './dto/find-all-workforce-users.dto';
 
 @Controller()
-export class PersonelController {
-  constructor(private readonly personelService: PersonelService) {}
+export class WorkforceUsersController {
+  constructor(private readonly workforceUsersService: WorkforceUsersService) {}
 
 
   @MessagePattern('createWorkforceUser')
-  async create(@Payload() createdWorkforceUserDto: CreatedWorkforceUserDto) {
-    const existing = await this.personelService.findByRegistrationNumber(
-      createdWorkforceUserDto.registrationNumber,
+  async create(@Payload() createWorkforceUserDto: CreateWorkforceUserDto) {
+    const existing = await this.workforceUsersService.findByRegistrationNumber(
+      createWorkforceUserDto.registrationNumber,
     );
 
     if (existing) {
@@ -23,19 +23,19 @@ export class PersonelController {
       });
     }
 
-    return this.personelService.create(createdWorkforceUserDto);
+    return this.workforceUsersService.create(createWorkforceUserDto);
   }
 
 
   @MessagePattern('findAllWorkforceUsers')
   findAll(@Payload() query: FindAllWorkforceUsersDto) {
-    return this.personelService.findAll(query);
+    return this.workforceUsersService.findAll(query);
   }
 
 
   @MessagePattern('findOneWorkforceUser')
   async findOne(@Payload() id: number) {
-    const workforceUser = await this.personelService.findOne(id);
+    const workforceUser = await this.workforceUsersService.findOne(id);
 
     if (!workforceUser) {
       throw new RpcException({
@@ -52,7 +52,7 @@ export class PersonelController {
   async update(@Payload() payload: { id: number; data: UpdateWorkforceUserDto }) {
     const { id, data } = payload;
 
-    const workforceUser = await this.personelService.findOne(id);
+    const workforceUser = await this.workforceUsersService.findOne(id);
 
     if (!workforceUser) {
       throw new RpcException({
@@ -65,7 +65,7 @@ export class PersonelController {
       data.registrationNumber !== undefined &&
       data.registrationNumber !== workforceUser.registrationNumber
     ) {
-      const duplicate = await this.personelService.findByRegistrationNumber(data.registrationNumber);
+      const duplicate = await this.workforceUsersService.findByRegistrationNumber(data.registrationNumber);
 
       if (duplicate) {
         throw new RpcException({
@@ -75,13 +75,13 @@ export class PersonelController {
       }
     }
 
-    return this.personelService.update(workforceUser, data);
+    return this.workforceUsersService.update(workforceUser, data);
   }
 
 
   @MessagePattern('removeWorkforceUser')
   async remove(@Payload() id: number) {
-    const workforceUser = await this.personelService.findOne(id);
+    const workforceUser = await this.workforceUsersService.findOne(id);
 
     if (!workforceUser) {
       throw new RpcException({
@@ -90,6 +90,6 @@ export class PersonelController {
       });
     }
 
-    return this.personelService.remove(workforceUser);
+    return this.workforceUsersService.remove(workforceUser);
   }
 }

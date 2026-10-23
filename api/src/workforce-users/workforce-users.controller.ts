@@ -2,13 +2,13 @@ import { Body, Controller, Delete, Get, Inject, Param, ParseIntPipe, Patch, Post
 import { ClientProxy } from "@nestjs/microservices";
 import { ApiBadRequestResponse, ApiConflictResponse, ApiCreatedResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { defaultIfEmpty, map } from 'rxjs';
-import { CreatedWorkforceUserDto } from "./dto/create-personel.dto";
-import { ListpersonelQueryDto } from "./dto/list-personel.dto";
-import { UpdateWorkforceUserDto } from "./dto/update-personel.dto";
+import { CreateWorkforceUserDto } from "./dto/create-workforce-user.dto";
+import { ListWorkforceUsersQueryDto } from "./dto/list-workforce-users-query.dto";
+import { UpdateWorkforceUserDto } from "./dto/update-workforce-user.dto";
 
-@ApiTags('personel')
-@Controller('personel')
-export class PersonelController {
+@ApiTags('workforce-users')
+@Controller('workforce-users')
+export class WorkforceUsersController {
   constructor(@Inject('WORKFORCE_SERVICE') private readonly client: ClientProxy) {}
 
   @Post()
@@ -16,7 +16,7 @@ export class PersonelController {
   @ApiCreatedResponse({ description: 'Personel oluşturuldu' })
   @ApiBadRequestResponse({ description: 'Geçersiz veri' })
   @ApiConflictResponse({ description: 'Bu sicil numarasıyla bir personel zaten var' })
-  create(@Body() dto: CreatedWorkforceUserDto) {
+  create(@Body() dto: CreateWorkforceUserDto) {
     return this.client.send('createWorkforceUser', dto);
   }
 
@@ -24,7 +24,7 @@ export class PersonelController {
   @ApiOperation({ summary: 'Personelleri sayfalı olarak listeler' })
   @ApiOkResponse({ description: 'Personel listesi' })
   @ApiBadRequestResponse({ description: 'Geçersiz query parametresi' })
-  findAll(@Query() query: ListpersonelQueryDto) {
+  findAll(@Query() query: ListWorkforceUsersQueryDto) {
     return this.client.send('findAllWorkforceUsers', query);
   }
 

@@ -3,7 +3,7 @@ import { MaxLength, IsString, IsNotEmpty,IsOptional,Matches,IsBoolean} from "cla
 
 
 
-export class CreatedWorkforceUserDto{
+export class CreateWorkforceUserDto{
     @ApiProperty({description:'personel adı zorunludur.',example:'zilan'})
     @IsString()
     @IsNotEmpty()

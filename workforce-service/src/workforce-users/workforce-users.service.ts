@@ -1,21 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, ILike, Repository } from 'typeorm';
-import { CreatedWorkforceUserDto } from './dto/create-personel.dto';
-import { UpdateWorkforceUserDto } from './dto/update-personel.dto';
+import { CreateWorkforceUserDto } from './dto/create-workforce-user.dto';
+import { UpdateWorkforceUserDto } from './dto/update-workforce-user.dto';
 import { WorkforceUser } from './entities/workforce-user.entity';
-import { FindAllWorkforceUsersDto } from './dto/find-all-personel.dto';
+import { FindAllWorkforceUsersDto } from './dto/find-all-workforce-users.dto';
 
 @Injectable()
-export class PersonelService {
+export class WorkforceUsersService {
   constructor(
     @InjectRepository(WorkforceUser)
     private readonly workforceUserRepository: Repository<WorkforceUser>,
   ) {}
 
 
-  async create(createdWorkforceUserDto: CreatedWorkforceUserDto): Promise<WorkforceUser> {
-    const workforceUser = this.workforceUserRepository.create(createdWorkforceUserDto);
+  async create(createWorkforceUserDto: CreateWorkforceUserDto): Promise<WorkforceUser> {
+    const workforceUser = this.workforceUserRepository.create(createWorkforceUserDto);
     return await this.workforceUserRepository.save(workforceUser);
   }
 
