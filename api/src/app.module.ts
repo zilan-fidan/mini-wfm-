@@ -3,6 +3,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { WORKFORCE_SERVICE } from './constants';
 import { HealthController } from './health/health.controller';
 import { TeamsModule } from './teams/teams.module';
+import { WorkforceUsersModule } from './workforce-users/workforce-users.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { TeamsModule } from './teams/teams.module';
       },
     ]),
     TeamsModule,
+    WorkforceUsersModule,
   ],
   controllers: [HealthController],
 })
