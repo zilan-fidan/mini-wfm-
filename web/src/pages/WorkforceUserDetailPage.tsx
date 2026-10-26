@@ -66,6 +66,9 @@ export default function WorkforceUserDetailPage() {
             <Descriptions.Item label="Ad">{user.firstname}</Descriptions.Item>
             <Descriptions.Item label="Soyad">{user.lastname}</Descriptions.Item>
             <Descriptions.Item label="Telefon">{formatPhone(user.phone)}</Descriptions.Item>
+            <Descriptions.Item label="Ekip">
+              {user.team ? <Link to={`/teams/${user.team.id}`}>{user.team.name}</Link> : '-'}
+            </Descriptions.Item>
             <Descriptions.Item label="Durum">
               {user.isActive ? (
                 <Tag color="green">Aktif</Tag>

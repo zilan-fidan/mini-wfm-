@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { TeamsService } from './teams.service';
 import { Team } from './entities/team.entity';
+import { WorkforceUser } from '../workforce-users/entities/workforce-user.entity';
 
 describe('TeamsService', () => {
   let service: TeamsService;
@@ -12,6 +13,10 @@ describe('TeamsService', () => {
         TeamsService,
         {
           provide: getRepositoryToken(Team),
+          useValue: {},
+        },
+        {
+          provide: getRepositoryToken(WorkforceUser),
           useValue: {},
         },
       ],

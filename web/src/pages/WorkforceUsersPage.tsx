@@ -43,6 +43,12 @@ const getColumns = (
     render: (phone: string | null) => formatPhone(phone),
   },
   {
+    title: 'Ekip',
+    key: 'team',
+    render: (_, record) =>
+      record.team ? <Link to={`/teams/${record.team.id}`}>{record.team.name}</Link> : '-',
+  },
+  {
     title: 'Durum',
     dataIndex: 'isActive',
     key: 'isActive',
