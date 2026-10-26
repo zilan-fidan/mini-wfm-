@@ -48,6 +48,10 @@ describe('TeamsController', () => {
   let service: jest.Mocked<
     Pick<
       TeamsService,
+      | 'create'
+      | 'findAll'
+      | 'findByName'
+      | 'update'
       | 'findOne'
       | 'findOneWithMembers'
       | 'remove'
@@ -60,6 +64,10 @@ describe('TeamsController', () => {
 
   beforeEach(async () => {
     service = {
+      create: jest.fn(),
+      findAll: jest.fn(),
+      findByName: jest.fn(),
+      update: jest.fn(),
       findOne: jest.fn(),
       findOneWithMembers: jest.fn(),
       remove: jest.fn(),
@@ -75,6 +83,90 @@ describe('TeamsController', () => {
     }).compile();
 
     controller = module.get<TeamsController>(TeamsController);
+  });
+
+  describe('ekip oluşturma (createTeam)', () => {
+    it('aynı isimde ekip varsa 409 döner ve oluşturmaz', async () => {
+      service.findByName.mockResolvedValue(makeTeam());
+
+      await expectRpcError(
+        controller.create({ name: 'Destek' }),
+        HttpStatus.CONFLICT,
+        'Bu isimde bir ekip zaten var',
+      );
+      expect(service.create).not.toHaveBeenCalled();
+    });
+
+    it('aynı isimde ekip yoksa ekibi oluşturur', async () => {
+      const dto = { name: 'Yeni Ekip', description: 'Açıklama' };
+      const created = makeTeam({ id: 2, name: 'Yeni Ekip' });
+      service.findByName.mockResolvedValue(null);
+      service.create.mockResolvedValue(created);
+
+      await expect(controller.create(dto)).resolves.toEqual(created);
+      expect(service.findByName).toHaveBeenCalledWith('Yeni Ekip');
+      expect(service.create).toHaveBeenCalledWith(dto);
+    });
+  });
+
+  describe('ekip listeleme (findAllTeams)', () => {
+    it('sorguyu service e iletir ve sonucu döner', async () => {
+      const query = { page: 2, limit: 5, search: 'des' };
+      const response = { data: [makeTeam()], total: 6, page: 2, limit: 5 };
+      service.findAll.mockResolvedValue(response);
+
+      await expect(controller.findAll(query)).resolves.toEqual(response);
+      expect(service.findAll).toHaveBeenCalledWith(query);
+    });
+  });
+
+  describe('ekip güncelleme (updateTeam)', () => {
+    it('ekip yoksa 404 döner ve güncellemez', async () => {
+      service.findOne.mockResolvedValue(null);
+
+      await expectRpcError(
+        controller.update({ id: 99, data: { description: 'x' } }),
+        HttpStatus.NOT_FOUND,
+        'Ekip bulunamadı',
+      );
+      expect(service.update).not.toHaveBeenCalled();
+    });
+
+    it('ad başka bir ekipte varsa 409 döner ve güncellemez', async () => {
+      service.findOne.mockResolvedValue(makeTeam({ id: 1, name: 'Destek' }));
+      service.findByName.mockResolvedValue(makeTeam({ id: 2, name: 'Satış' }));
+
+      await expectRpcError(
+        controller.update({ id: 1, data: { name: 'Satış' } }),
+        HttpStatus.CONFLICT,
+        'Bu isimde bir ekip zaten var',
+      );
+      expect(service.update).not.toHaveBeenCalled();
+    });
+
+    it('ekip kendi adıyla güncellenirse çakışma kontrolü yapmaz', async () => {
+      const team = makeTeam({ name: 'Destek' });
+      service.findOne.mockResolvedValue(team);
+      service.update.mockResolvedValue(team);
+
+      await controller.update({ id: 1, data: { name: 'Destek' } });
+
+      expect(service.findByName).not.toHaveBeenCalled();
+      expect(service.update).toHaveBeenCalledWith(team, { name: 'Destek' });
+    });
+
+    it('ad gönderilmezse çakışma kontrolü yapmadan günceller', async () => {
+      const team = makeTeam();
+      const updated = makeTeam({ isActive: false });
+      service.findOne.mockResolvedValue(team);
+      service.update.mockResolvedValue(updated);
+
+      await expect(
+        controller.update({ id: 1, data: { isActive: false } }),
+      ).resolves.toEqual(updated);
+      expect(service.findByName).not.toHaveBeenCalled();
+      expect(service.update).toHaveBeenCalledWith(team, { isActive: false });
+    });
   });
 
   describe('ekip detayı (findOneTeam)', () => {
