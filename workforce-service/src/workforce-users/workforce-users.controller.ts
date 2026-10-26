@@ -4,6 +4,7 @@ import { WorkforceUsersService } from './workforce-users.service';
 import { CreateWorkforceUserDto } from './dto/create-workforce-user.dto';
 import { UpdateWorkforceUserDto } from './dto/update-workforce-user.dto';
 import { FindAllWorkforceUsersDto } from './dto/find-all-workforce-users.dto';
+import { toWorkforceUserResponse } from './workforce-user.response';
 
 @Controller()
 export class WorkforceUsersController {
@@ -23,13 +24,15 @@ export class WorkforceUsersController {
       });
     }
 
-    return this.workforceUsersService.create(createWorkforceUserDto);
+    const created = await this.workforceUsersService.create(createWorkforceUserDto);
+    return toWorkforceUserResponse(created);
   }
 
 
   @MessagePattern('findAllWorkforceUsers')
-  findAll(@Payload() query: FindAllWorkforceUsersDto) {
-    return this.workforceUsersService.findAll(query);
+  async findAll(@Payload() query: FindAllWorkforceUsersDto) {
+    const result = await this.workforceUsersService.findAll(query);
+    return { ...result, data: result.data.map(toWorkforceUserResponse) };
   }
 
 
@@ -44,7 +47,7 @@ export class WorkforceUsersController {
       });
     }
 
-    return workforceUser;
+    return toWorkforceUserResponse(workforceUser);
   }
 
 
@@ -75,7 +78,8 @@ export class WorkforceUsersController {
       }
     }
 
-    return this.workforceUsersService.update(workforceUser, data);
+    const updated = await this.workforceUsersService.update(workforceUser, data);
+    return toWorkforceUserResponse(updated);
   }
 
 
