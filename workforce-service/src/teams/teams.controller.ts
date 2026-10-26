@@ -17,7 +17,7 @@ export class TeamsController {
    
     if (existing) {
       throw new RpcException({
-        statusCode: HttpStatus.BAD_REQUEST,
+        statusCode: HttpStatus.CONFLICT,
         message: 'Bu isimde bir ekip zaten var',
       });
     }
