@@ -5,22 +5,28 @@ import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import { HealthController } from './health/health.controller';
 import { TeamsModule } from './teams/teams.module';
 import { WorkforceUsersModule } from './workforce-users/workforce-users.module';
+import { WorkforceEnv, validateEnv } from './config/env.validation';
+
 
 @Module({
   imports: [
-    ConfigModule.forRoot({isGlobal: true,}),
+   ConfigModule.forRoot({
+  isGlobal: true,
+  validate: validateEnv,
+}),
 
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
+      useFactory: (configService: ConfigService<WorkforceEnv, true>) => ({
         type: 'postgres',
 
-        host: configService.get<string>('DB_HOST'),
-        port: Number(configService.get<string>('DB_PORT')),
+        // Değerler şemadan geçmiştir: DB_PORT zaten sayıdır
+        host: configService.get('DB_HOST', { infer: true }),
+        port: configService.get('DB_PORT', { infer: true }),
 
-        username: configService.get<string>('DB_USERNAME'),
-        password: configService.get<string>('DB_PASSWORD'),
-        database: configService.get<string>('DB_DATABASE'),
+        username: configService.get('DB_USERNAME', { infer: true }),
+        password: configService.get('DB_PASSWORD', { infer: true }),
+        database: configService.get('DB_DATABASE', { infer: true }),
 
         autoLoadEntities: true,
 

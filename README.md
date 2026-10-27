@@ -53,13 +53,14 @@ docker ps   # "mini-wfm-postgres" container'ı listelenmeli
 
 ### 3. Ortam değişkenlerini hazırlayın
 
-`workforce-service` veritabanı bilgilerini `.env` dosyasından okur. Örnek dosyayı kopyalamak yeterlidir; değerler `docker-compose.yaml` ile uyumludur:
+`api` ve `workforce-service` ayarlarını kendi klasörlerindeki `.env` dosyasından okur. Örnek dosyaları kopyalamak yeterlidir; değerler `docker-compose.yaml` ve varsayılan portlarla uyumludur:
 
 ```bash
+cp api/.env.example api/.env
 cp workforce-service/.env.example workforce-service/.env
 ```
 
-`api` ve `web` için `.env` dosyası gerekmez.
+`web` için `.env` dosyası gerekmez. Değişkenlerin anlamı için [Ayarlar](#ayarlar) bölümüne bakın.
 
 ### 4. Bağımlılıkları kurun
 
@@ -112,6 +113,39 @@ PostgreSQL bağlantı bilgileri (DBeaver vb. için):
 Host: localhost   Port: 5433   Database: mini_wfm
 Username: postgres   Password: postgres
 ```
+
+## Ayarlar
+
+Ayarlar `@nestjs/config` ile okunur ve uygulama açılırken bir Joi şemasıyla doğrulanır (`src/config/env.validation.ts`). Zorunlu bir değer eksikse ya da sayı beklenen yere metin yazılmışsa uygulama **açılmaz** ve hatalı değişkenlerin hepsini tek seferde listeler:
+
+```text
+Error: Config validation error:
+  - "PORT" must be a number
+  - "DB_PASSWORD" is required
+```
+
+**api** (`api/.env`)
+
+| Değişken | Zorunlu | Tip | Varsayılan | Açıklama |
+|---|---|---|---|---|
+| `NODE_ENV` | hayır | `development` / `production` / `test` | `development` | Çalışma ortamı |
+| `PORT` | hayır | port numarası | `3000` | api'nin HTTP portu |
+| `WORKFORCE_SERVICE_HOST` | **evet** | host adı | — | workforce-service adresi |
+| `WORKFORCE_SERVICE_PORT` | **evet** | port numarası | — | workforce-service TCP portu |
+
+**workforce-service** (`workforce-service/.env`)
+
+| Değişken | Zorunlu | Tip | Varsayılan | Açıklama |
+|---|---|---|---|---|
+| `NODE_ENV` | hayır | `development` / `production` / `test` | `development` | Çalışma ortamı |
+| `PORT` | hayır | port numarası | `4001` | Dinlenen TCP portu; api'deki `WORKFORCE_SERVICE_PORT` ile aynı olmalı |
+| `DB_HOST` | **evet** | metin | — | PostgreSQL adresi |
+| `DB_PORT` | hayır | port numarası | `5432` | PostgreSQL portu (Docker ile `5433`) |
+| `DB_USERNAME` | **evet** | metin | — | |
+| `DB_PASSWORD` | **evet** | metin | — | |
+| `DB_DATABASE` | **evet** | metin | — | |
+
+Yeni bir ayar eklerken üç yeri birlikte güncelleyin: şema (`env.validation.ts`), tip (`ApiEnv` / `WorkforceEnv`) ve `.env.example`.
 
 ## Testler
 
@@ -228,7 +262,8 @@ mini-wfm/
 |---|---|
 | Arayüzde "Sunucuya ulaşılamıyor" | `api` çalışmıyor. Terminal 2'de `pnpm start:dev` çalıştırın. |
 | API `503 Servise şu anda ulaşılamıyor` dönüyor | `workforce-service` çalışmıyor veya 4001 portunda değil. |
-| `workforce-service` açılmıyor, veritabanı bağlantı hatası | Docker Desktop kapalı, container ayakta değil (`docker compose up -d`) ya da `workforce-service/.env` dosyası eksik. |
+| Açılışta `Config validation error` | `.env` dosyası yok ya da listelenen değişkenler eksik/hatalı. `.env.example` ile karşılaştırın. |
+| `workforce-service` açılmıyor, veritabanı bağlantı hatası | Docker Desktop kapalı ya da container ayakta değil (`docker compose up -d`). |
 | `port is already allocated` (5433) | Bilgisayarda başka bir PostgreSQL bu portu kullanıyor; onu durdurun ya da `docker-compose.yaml` ve `.env` içindeki portu değiştirin. |
 | Backend değişikliğinden sonra yeni alanlar gelmiyor veya sayfa beyaz kalıyor | Servis izleme modu olmadan (`pnpm start`) başlatılmış ve eski kodla çalışıyor. Durdurup `pnpm start:dev` ile yeniden başlatın. |
 | Başarı/hata mesajları ve onay pencereleri görünmüyor | `web/src/main.tsx` dosyasının en üstündeki `@ant-design/v5-patch-for-react-19` import'u silinmiş olabilir. Ant Design 5'in bu bileşenleri React 19'da bu yama olmadan çalışmaz. |

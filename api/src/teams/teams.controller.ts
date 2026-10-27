@@ -1,4 +1,5 @@
 import {Body,Controller,Delete,Get,Inject,Param,ParseIntPipe,Patch,Post,Query,} from '@nestjs/common';
+import { WORKFORCE_SERVICE } from '../constants';
 import { ClientProxy } from '@nestjs/microservices';
 import {ApiBadRequestResponse,ApiConflictResponse,ApiCreatedResponse,ApiNotFoundResponse,ApiOkResponse, ApiOperation,ApiParam,ApiTags} from '@nestjs/swagger';
 import { CreateTeamDto } from './dto/create-team.dto';
@@ -11,7 +12,7 @@ import { defaultIfEmpty, map } from 'rxjs';
 @Controller('teams')
 export class TeamsController {
   constructor(
-    @Inject('WORKFORCE_SERVICE') private readonly client: ClientProxy,
+    @Inject(WORKFORCE_SERVICE) private readonly client: ClientProxy,
   ) {}
 
   @Post()
