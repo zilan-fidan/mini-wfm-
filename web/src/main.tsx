@@ -1,3 +1,4 @@
+import '@ant-design/v5-patch-for-react-19'; // antd statik metotları (Modal.success, message) React 19'da çalışsın
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
