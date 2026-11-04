@@ -1,11 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import { HealthController } from './health/health.controller';
 import { TeamsModule } from './teams/teams.module';
 import { WorkforceUsersModule } from './workforce-users/workforce-users.module';
 import { WorkforceEnv, validateEnv } from './config/env.validation';
+import { CorrelationModule } from './common/correlation/correlation.module';
+import { RpcLoggingInterceptor } from './common/correlation/rpc-logging.interceptor';
 
 
 @Module({
@@ -14,6 +17,7 @@ import { WorkforceEnv, validateEnv } from './config/env.validation';
   isGlobal: true,
   validate: validateEnv,
 }),
+    CorrelationModule,
 
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -46,6 +50,7 @@ import { WorkforceEnv, validateEnv } from './config/env.validation';
 
 
   controllers: [HealthController],
-  providers: [],
+  // APP_INTERCEPTOR: interceptor DI ile kurulur, CorrelationContextService inject edilebilir
+  providers: [{ provide: APP_INTERCEPTOR, useClass: RpcLoggingInterceptor }],
 })
 export class AppModule {}
