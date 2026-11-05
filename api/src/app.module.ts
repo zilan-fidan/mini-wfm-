@@ -10,6 +10,7 @@ import { WORKFORCE_SERVICE } from './constants';
 import { HealthController } from './health/health.controller';
 import { TeamsModule } from './teams/teams.module';
 import { WorkforceUsersModule } from './workforce-users/workforce-users.module';
+import { AccountsModule } from './accounts/accounts.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { WorkforceUsersModule } from './workforce-users/workforce-users.module';
 
     TeamsModule,
     WorkforceUsersModule,
+    AccountsModule,
   ],
   controllers: [HealthController],
   // APP_INTERCEPTOR: global interceptor DI ile kurulur (useGlobalInterceptors(new ...) servisi inject edemez)

@@ -9,7 +9,7 @@ import { WorkforceUsersModule } from './workforce-users/workforce-users.module';
 import { WorkforceEnv, validateEnv } from './config/env.validation';
 import { CorrelationModule } from './common/correlation/correlation.module';
 import { RpcLoggingInterceptor } from './common/correlation/rpc-logging.interceptor';
-
+import { AccountsModule } from './account/accounts.module';
 
 @Module({
   imports: [
@@ -18,6 +18,7 @@ import { RpcLoggingInterceptor } from './common/correlation/rpc-logging.intercep
   validate: validateEnv,
 }),
     CorrelationModule,
+    AccountsModule,
 
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
