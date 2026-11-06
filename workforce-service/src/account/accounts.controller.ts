@@ -125,10 +125,9 @@ export class AccountsController {
       account.passwordHash,
     );
 
-    if (!isPasswordValid) {
-      throw invalidCredentials();
-    }
-
+  if (!isPasswordValid || !account.isActive) {
+  throw invalidCredentials();
+}
     // Hash'i yanıttan çıkar
     const { passwordHash: _hash, ...safeAccount } = account;
 

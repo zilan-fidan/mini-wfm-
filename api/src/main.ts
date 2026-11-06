@@ -28,9 +28,18 @@ async function bootstrap() {
   );
 
   const config = new DocumentBuilder()
-    .setTitle('Mini WFM API')
-    .setVersion('1.0')
-    .build();
+  .setTitle('Mini WFM API')
+  .setVersion('1.0')
+  .addBearerAuth(
+    {
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+      description: 'Login işleminden aldığınız accessToken değerini girin.',
+    },
+    'access-token',
+  )
+  .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);
 

@@ -7,8 +7,10 @@ import { UpdateTeamDto } from './dto/update-team.dto';
 import { ListTeamsQueryDto } from './dto/list-teams-query.dto';
 import { AddTeamMemberDto } from './dto/add-team-member.dto';
 import { defaultIfEmpty, map } from 'rxjs';
+import { ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('teams')
+@ApiBearerAuth('access-token')
 @Controller('teams')
 export class TeamsController {
   constructor(

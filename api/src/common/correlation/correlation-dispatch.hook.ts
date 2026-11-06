@@ -1,19 +1,29 @@
-import { ReadPacket } from '@nestjs/microservices';
+
+import type { ReadPacket } from '@nestjs/microservices';
 import { CorrelationContextService } from './correlation-context.service';
 import { CORRELATION_ID_METADATA_KEY } from './correlation.constants';
 
-// ClientProxy her giden paketi transport'a vermeden önce bu hook'tan geçirir.
-// Id payload'a değil paketin metadata alanına yazılır: iş verisi ve @Payload() handler'lar değişmez.
-export function createCorrelationDispatchHook(correlation: CorrelationContextService,){
+// API'den workforce-service'e giden mesajları düzenler
+export function createCorrelationDispatchHook(
+  correlation: CorrelationContextService,
+) {
   return (packet: ReadPacket) => {
-    // Hook client.send'e subscribe edilen async zincirde çalışır; ALS isteğin id'sini verir
+    // Aktif isteğin bilgilerini al
     const correlationId = correlation.getCorrelationId();
-    if (!correlationId) return;
+    const actor = correlation.getActor();
 
-    // Nest kuralı: hook pattern ve data'yı değiştirmemeli, sadece metadata atamalı
+    // Ne correlation ID ne de actor varsa işlem yapma
+    if (!correlationId && !actor) return;
+
+    // Mevcut metadata'yı koruyarak yeni bilgileri ekle
     packet.metadata = {
       ...packet.metadata,
-      [CORRELATION_ID_METADATA_KEY]: correlationId,
+
+      ...(correlationId
+        ? { [CORRELATION_ID_METADATA_KEY]: correlationId }
+        : {}),
+
+      ...(actor ? { actor: JSON.stringify(actor) } : {}),
     };
   };
 }

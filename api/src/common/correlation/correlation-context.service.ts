@@ -1,30 +1,54 @@
+
 import { Injectable } from '@nestjs/common';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 
 export interface CorrelationStore {
   correlationId: string;
-  // performance.now() değeri; süre ölçümü isteğin en başından başlar
+
+  // İsteğin başlangıç zamanı
   startedAt: number;
-  // Erişim logunu interceptor yazacaksa true olur; middleware fallback'i çift log yazmasın diye
+
+  // Çift log oluşmasını engeller
   handledByInterceptor?: boolean;
+
+  // İsteği gerçekleştiren kullanıcı
+  actor?: JwtPayload;
+  
 }
 
-// Singleton provider: isteklerin birbirinden ayrılmasını DI scope'u değil AsyncLocalStorage sağlar
 @Injectable()
 export class CorrelationContextService {
   private readonly storage = new AsyncLocalStorage<CorrelationStore>();
- 
-  // (middleware)callback ve içinden başlayan tüm asenkron işler bu store'u görür
+
+  // Her isteğe ait bağımsız async bağlam oluşturur
   run<T>(store: CorrelationStore, callback: () => T): T {
     return this.storage.run(store, callback);
   }
-// interceptor 
+
+  // Aktif isteğin bütün bilgilerini döndürür
   getStore(): CorrelationStore | undefined {
     return this.storage.getStore();
   }
 
-  //(dispatch hook ) İstek dışında (ör. uygulama açılışı) çağrılırsa undefined döner, hata fırlatmaz
+  // Correlation ID bilgisini döndürür
   getCorrelationId(): string | undefined {
     return this.storage.getStore()?.correlationId;
   }
+
+  // Actor bilgisini kaydeder
+  setActor(actor: JwtPayload): void {
+    const store = this.storage.getStore();
+
+    if (store) {
+      store.actor = actor;
+    }
+  }
+
+  // Actor bilgisini döndürür
+  getActor(): JwtPayload | undefined {
+    return this.storage.getStore()?.actor;
+  }
+
+
 }
