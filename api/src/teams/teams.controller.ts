@@ -8,6 +8,8 @@ import { ListTeamsQueryDto } from './dto/list-teams-query.dto';
 import { AddTeamMemberDto } from './dto/add-team-member.dto';
 import { defaultIfEmpty, map } from 'rxjs';
 import { ApiBearerAuth } from '@nestjs/swagger';
+import {Roles,Role} from '../auth/decorators/roles.decorator';
+
 
 @ApiTags('teams')
 @ApiBearerAuth('access-token')
@@ -17,6 +19,7 @@ export class TeamsController {
     @Inject(WORKFORCE_SERVICE) private readonly client: ClientProxy,
   ) {}
 
+  @Roles(Role.ADMIN)
   @Post()
   @ApiOperation({ summary: 'Yeni ekip oluşturur' })
   @ApiCreatedResponse({ description: 'Ekip oluşturuldu' })
@@ -24,6 +27,7 @@ export class TeamsController {
   @ApiConflictResponse({ description: 'Bu isimde bir ekip zaten var' })
   create(@Body() dto: CreateTeamDto) {return this.client.send('createTeam', dto);}
 
+  @Roles(Role.ADMIN, Role.PLANNER, Role.VIEWER)
   @Get()
   @ApiOperation({ summary: 'Ekipleri sayfalı olarak listeler' })
   @ApiOkResponse({ description: 'Ekip listesi' })
@@ -32,6 +36,7 @@ export class TeamsController {
     return this.client.send('findAllTeams', query);
   }
 
+  @Roles(Role.ADMIN, Role.PLANNER, Role.VIEWER)
   @Get(':id')
   @ApiOperation({ summary: 'Ekip detayını üyeleriyle (members) birlikte getirir' })
   @ApiParam({ name: 'id', type: Number, example: 1 })
@@ -40,6 +45,7 @@ export class TeamsController {
   @ApiNotFoundResponse({ description: 'Ekip bulunamadı' })
   findOne(@Param('id', ParseIntPipe) id: number) {return this.client.send('findOneTeam', id); }
 
+  @Roles(Role.ADMIN)
   @Patch(':id')
   @ApiOperation({ summary: 'Ekibi kısmen günceller' })
   @ApiParam({ name: 'id', type: Number, example: 1 })
@@ -50,10 +56,12 @@ export class TeamsController {
   update(
    @Param('id', ParseIntPipe) id: number,
    @Body() dto: UpdateTeamDto,
-  ) { 
+    ) { 
     return this.client.send('updateTeam', { id, data: dto });
-   } 
+   }
 
+
+  @Roles(Role.ADMIN)
   @Delete(':id')
   @ApiOperation({ summary: 'Ekibi siler' })
   @ApiParam({ name: 'id', type: Number, example: 1 })
@@ -68,6 +76,7 @@ export class TeamsController {
   );
 }
 
+  @Roles(Role.ADMIN)
   @Post(':id/members')
   @ApiOperation({ summary: 'Personeli ekibe ekler' })
   @ApiParam({ name: 'id', type: Number, example: 1 })
@@ -85,6 +94,7 @@ export class TeamsController {
     });
   }
 
+  @Roles(Role.ADMIN)
   @Delete(':id/members/:workforceUserId')
   @ApiOperation({ summary: 'Personeli ekipten çıkarır' })
   @ApiParam({ name: 'id', type: Number, example: 1 })

@@ -4,8 +4,15 @@ import { WORKFORCE_SERVICE } from '../constants';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import { CreateAccountDto } from './dto/create-account.dto';
+import { Roles, Role } from '../auth/decorators/roles.decorator';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 
-
+@ApiTags('accounts')
+@ApiBearerAuth('access-token')
 @Controller('accounts')
 export class AccountsController {
  constructor(
@@ -13,6 +20,7 @@ export class AccountsController {
   private readonly workforceClient: ClientProxy,
 ) {}
 
+  @Roles(Role.ADMIN)
   @Post()
   async createAccount(@Body() dto: CreateAccountDto) {
     return firstValueFrom(
@@ -20,6 +28,7 @@ export class AccountsController {
     );
   }
 
+  @Roles(Role.ADMIN)
   @Get()
   async findAllAccounts() {
     return firstValueFrom(
