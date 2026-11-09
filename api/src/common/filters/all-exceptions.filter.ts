@@ -1,12 +1,6 @@
-import {
-  ArgumentsHost,
-  Catch,
-  ExceptionFilter,
-  HttpException,
-  HttpStatus,
-  Logger,
-} from '@nestjs/common';
-import { Response } from 'express';
+import {ArgumentsHost,Catch,ExceptionFilter, HttpException,HttpStatus,Logger,}from '@nestjs/common';
+import { Request, Response } from 'express';
+import { CORRELATION_ID_HEADER_LOWER } from '../correlation/correlation.constants';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -39,7 +33,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     // Durum 4: diğer her şey → 500, ayrıntı sadece loga
+    // Id'yi CorrelationIdMiddleware isteğe yazar; filter `new` ile kurulduğu için DI yerine buradan okunur
+    const correlationId = host
+      .switchToHttp()
+      .getRequest<Request>()
+      .headers[CORRELATION_ID_HEADER_LOWER];
     this.logger.error(
+      `Internal Server Error correlationId=${correlationId ?? '-'}`,
       exception instanceof Error ? exception.stack : JSON.stringify(exception),
     );
     return this.send(
