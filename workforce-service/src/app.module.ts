@@ -1,26 +1,36 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import { HealthController } from './health/health.controller';
 import { TeamsModule } from './teams/teams.module';
 import { WorkforceUsersModule } from './workforce-users/workforce-users.module';
+import { WorkforceEnv, validateEnv } from './config/env.validation';
+import { CorrelationModule } from './common/correlation/correlation.module';
+import { RpcLoggingInterceptor } from './common/correlation/rpc-logging.interceptor';
+
 
 @Module({
   imports: [
-    ConfigModule.forRoot({isGlobal: true,}),
+   ConfigModule.forRoot({
+  isGlobal: true,
+  validate: validateEnv,
+}),
+    CorrelationModule,
 
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
+      useFactory: (configService: ConfigService<WorkforceEnv, true>) => ({
         type: 'postgres',
 
-        host: configService.get<string>('DB_HOST'),
-        port: Number(configService.get<string>('DB_PORT')),
+        // Değerler şemadan geçmiştir: DB_PORT zaten sayıdır
+        host: configService.get('DB_HOST', { infer: true }),
+        port: configService.get('DB_PORT', { infer: true }),
 
-        username: configService.get<string>('DB_USERNAME'),
-        password: configService.get<string>('DB_PASSWORD'),
-        database: configService.get<string>('DB_DATABASE'),
+        username: configService.get('DB_USERNAME', { infer: true }),
+        password: configService.get('DB_PASSWORD', { infer: true }),
+        database: configService.get('DB_DATABASE', { infer: true }),
 
         autoLoadEntities: true,
 
@@ -40,6 +50,7 @@ import { WorkforceUsersModule } from './workforce-users/workforce-users.module';
 
 
   controllers: [HealthController],
-  providers: [],
+  // APP_INTERCEPTOR: interceptor DI ile kurulur, CorrelationContextService inject edilebilir
+  providers: [{ provide: APP_INTERCEPTOR, useClass: RpcLoggingInterceptor }],
 })
 export class AppModule {}
