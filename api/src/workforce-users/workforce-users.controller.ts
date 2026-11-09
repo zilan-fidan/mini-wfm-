@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Inject, Param, ParseIntPipe, Patch, Post, Query } from "@nestjs/common";
+import { WORKFORCE_SERVICE } from '../constants';
 import { ClientProxy } from "@nestjs/microservices";
 import { ApiBadRequestResponse, ApiConflictResponse, ApiCreatedResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { defaultIfEmpty, map } from 'rxjs';
@@ -9,7 +10,7 @@ import { UpdateWorkforceUserDto } from "./dto/update-workforce-user.dto";
 @ApiTags('workforce-users')
 @Controller('workforce-users')
 export class WorkforceUsersController {
-  constructor(@Inject('WORKFORCE_SERVICE') private readonly client: ClientProxy) {}
+  constructor(@Inject(WORKFORCE_SERVICE) private readonly client: ClientProxy) {}
 
   @Post()
   @ApiOperation({ summary: 'Yeni personel oluşturur' })
