@@ -1,9 +1,17 @@
 
+import { RpcException } from '@nestjs/microservices';
+import { isISO8601 } from 'class-validator';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-
 import { Shift } from './entities/shift.entity';
+
+export type ListShiftsQuery = {
+  from: string;
+  to: string;
+  workforceUserId?: number;
+  teamId?: number;
+};
 
 @Injectable()
 export class ShiftsService {
@@ -11,6 +19,39 @@ export class ShiftsService {
     @InjectRepository(Shift)
     private readonly shiftRepository: Repository<Shift>,
   ) {}
+
+  async findAllShifts(filters: ListShiftsQuery): Promise<Shift[]> {
+    const from = new Date(filters.from);
+    const to = new Date(filters.to);
+    const duration = to.getTime() - from.getTime();
+    if (
+      !isISO8601(filters.from, { strict: true, strictSeparator: true }) ||
+      !isISO8601(filters.to, { strict: true, strictSeparator: true }) ||
+      !Number.isFinite(duration) || duration <= 0 || duration > 31 * 86400000 ||
+      [filters.workforceUserId, filters.teamId].some(
+        (id) => id !== undefined && (!Number.isInteger(id) || id <= 0),
+      )
+    ) {
+      throw new RpcException({ statusCode: 400, message: 'Geçersiz filtre; tarih aralığı pozitif olmalı ve 31 günü aşmamalıdır' });
+    }
+
+    const query = this.shiftRepository.createQueryBuilder('shift')
+      .leftJoin('shift.workforceUser', 'person')
+      .leftJoin('person.team', 'team')
+      .addSelect(['person.id', 'person.firstname', 'person.lastname', 'team.id', 'team.name'])
+      .where('shift.startAt < :to', { to })
+      .andWhere('shift.endAt > :from', { from })
+      .orderBy('shift.startAt', 'ASC')
+      .addOrderBy('shift.id', 'ASC');
+
+    if (filters.workforceUserId !== undefined) {
+      query.andWhere('shift.workforceUserId = :workforceUserId', { workforceUserId: filters.workforceUserId });
+    }
+    if (filters.teamId !== undefined) {
+      query.andWhere('person.teamId = :teamId', { teamId: filters.teamId });
+    }
+    return query.getMany();
+  }
 
   // Yeni vardiyayı veritabanına kaydeder.
   async createShift(data: Partial<Shift>): Promise<Shift> {

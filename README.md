@@ -267,3 +267,33 @@ mini-wfm/
 | `port is already allocated` (5433) | Bilgisayarda başka bir PostgreSQL bu portu kullanıyor; onu durdurun ya da `docker-compose.yaml` ve `.env` içindeki portu değiştirin. |
 | Backend değişikliğinden sonra yeni alanlar gelmiyor veya sayfa beyaz kalıyor | Servis izleme modu olmadan (`pnpm start`) başlatılmış ve eski kodla çalışıyor. Durdurup `pnpm start:dev` ile yeniden başlatın. |
 | Başarı/hata mesajları ve onay pencereleri görünmüyor | `web/src/main.tsx` dosyasının en üstündeki `@ant-design/v5-patch-for-react-19` import'u silinmiş olabilir. Ant Design 5'in bu bileşenleri React 19'da bu yama olmadan çalışmaz. |
+
+
+### Takvim vardiya listesi
+
+`GET /api/shifts?from=2026-11-12T00:00:00%2B03:00&to=2026-11-14T00:00:00%2B03:00`
+
+ADMIN, PLANNER ve VIEWER rolleri listeyi okuyabilir. `from` ve `to` zorunlu ISO 8601 tarihleridir;
+`from < to` olmalı ve aralık en fazla 31 × 24 saat olmalıdır (aksi halde 400).
+Saat dilimini açıkça belirtin; URL içindeki `+` işaretini `%2B` olarak kodlayın.
+İsteğe bağlı pozitif `workforceUserId` ve `teamId` filtreleri birlikte kullanılabilir.
+Liste sayfalı değildir, `startAt` artan sıradadır. Her vardiyanın `workforceUser`
+alanında `id`, `firstname`, `lastname` ve `team: { id, name }` bulunur; ekipsiz personelde `team: null` döner.
+Personel ve ekip tek SQL sorgusunda join ile yüklenir.
+
+Aralık `[from, to)` şeklindedir: `startAt < to AND endAt > from`.
+Örneğin 12 Kasım 23:00–13 Kasım 07:00 vardiyası iki günün ayrı sorgusunda da görünür.
+Tam `from` anında biten veya tam `to` anında başlayan vardiyalar dahil edilmez.
+
+**Ekip filtresi sınırlaması:** `teamId` personelin şu anki ekibine göre çalışır.
+Personel başka ekibe taşındığında geçmiş vardiyalar da yeni ekibinin altında listelenir;
+vardiyanın oluşturulduğu tarihteki ekip bilgisi saklanmaz.
+
+Doğrulama:
+
+- API query testleri: `cd api && npm test -- --runInBand src/shifts/shifts-list.spec.ts`
+- PostgreSQL entegrasyonu: `cd workforce-service && npm test -- --runInBand src/shifts/shifts-list.integration.spec.ts`
+
+Entegrasyon testi varsayılan olarak Docker Compose veritabanına (`127.0.0.1:5433/mini_wfm`)
+bağlanır; farklı test veritabanı için `SHIFTS_TEST_DATABASE_URL` kullanılır.
+Test kendi benzersiz şemasını oluşturup sonunda kaldırır; bağlantı kullanıcısının şema oluşturma yetkisi gerekir.

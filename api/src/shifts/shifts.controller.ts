@@ -1,38 +1,11 @@
-
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Inject,
-  Param,
-  ParseIntPipe,
-  Patch,
-  Post,
-} from '@nestjs/common';
-
+import {BadRequestException,Query,Body,Controller,Delete, Get,Inject,Param,ParseIntPipe,Patch,Post,} from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-
-import {
-  ApiBadRequestResponse,
-  ApiBearerAuth,
-  ApiConflictResponse,
-  ApiCreatedResponse,
-  ApiNotFoundResponse,
-  ApiOkResponse,
-  ApiOperation,
-  ApiParam,
-  ApiTags,
-  ApiUnauthorizedResponse,
-  ApiForbiddenResponse,
-} from '@nestjs/swagger';
-
+import {ApiBadRequestResponse,ApiBearerAuth, ApiConflictResponse, ApiCreatedResponse,ApiNotFoundResponse,ApiOkResponse, ApiOperation, ApiParam,ApiTags,ApiUnauthorizedResponse,ApiForbiddenResponse,} from '@nestjs/swagger';
 import { defaultIfEmpty, map } from 'rxjs';
-
 import { WORKFORCE_SERVICE } from '../constants';
 import { Roles, Role } from '../auth/decorators/roles.decorator';
-
 import { CreateShiftDto } from './dto/create-shift.dto';
+import { ListShiftsDto } from './dto/list-shifts.dto';
 import { UpdateShiftDto } from './dto/update-shift.dto';
 
 @ApiTags('shifts')
@@ -43,6 +16,19 @@ export class ShiftsController {
     @Inject(WORKFORCE_SERVICE)
     private readonly client: ClientProxy,
   ) {}
+
+  @Roles(Role.ADMIN, Role.PLANNER, Role.VIEWER)
+  @Get()
+  @ApiOperation({ summary: 'Tarih aralığıyla kesişen vardiyaları listeler' })
+  @ApiOkResponse({ description: 'Başlangıç tarihine göre sıralı, personel ve ekip bilgili liste' })
+  @ApiBadRequestResponse({ description: 'Geçersiz filtre veya 31 günü aşan aralık' })
+  findAll(@Query() query: ListShiftsDto) {
+    const duration = Date.parse(query.to) - Date.parse(query.from);
+    if (!Number.isFinite(duration) || duration <= 0 || duration > 31 * 86400000) {
+      throw new BadRequestException('Tarih aralığı pozitif olmalı ve 31 günü aşmamalıdır');
+    }
+    return this.client.send('findAllShifts', query);
+  }
 
   // 1. VARDİYA OLUŞTURMA
   @Roles(Role.ADMIN, Role.PLANNER)

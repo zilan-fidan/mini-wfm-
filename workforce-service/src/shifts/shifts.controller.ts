@@ -1,14 +1,11 @@
 
 import { Controller } from '@nestjs/common';
-import {
-  MessagePattern,
-  RpcException,
-} from '@nestjs/microservices';
+import {MessagePattern,RpcException,} from '@nestjs/microservices';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ShiftsService } from './shifts.service';
+import type { ListShiftsQuery } from './shifts.service';
 import { validateShiftPeriod } from './utils/validate-shift-period';
-
 import { WorkforceUser } from '../workforce-users/entities/workforce-user.entity';
 import { CorrelationContextService } from '../common/correlation/correlation-context.service';
 
@@ -45,6 +42,11 @@ export class ShiftsController {
   // =====================================================
   // 1. VARDİYA OLUŞTURMA
   // =====================================================
+
+  @MessagePattern('findAllShifts')
+  findAllShifts(payload: ListShiftsQuery) {
+    return this.shiftsService.findAllShifts(payload);
+  }
 
   @MessagePattern('createShift')
   async createShift(payload: CreateShiftPayload) {
