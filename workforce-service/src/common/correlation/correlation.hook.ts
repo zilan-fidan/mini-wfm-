@@ -4,16 +4,11 @@ import { TcpContext } from '@nestjs/microservices';
 import { Observable } from 'rxjs';
 import { Logger } from '@nestjs/common';
 import { CorrelationContextService } from './correlation-context.service';
+import type { Actor } from './correlation-context.service';
 import {
   CORRELATION_ID_METADATA_KEY,
   resolveCorrelationId,
 } from './correlation.constants';
-
-type Actor = {
-  id: number;
-  username: string;
-  role: 'ADMIN' | 'PLANNER' | 'VIEWER';
-};
 
 // Metadata'dan gelen actor bilgisinin yapısını kontrol eder
 function isActor(value: unknown): value is Actor {

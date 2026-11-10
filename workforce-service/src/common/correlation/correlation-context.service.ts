@@ -1,10 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+export interface Actor {
+  id: number;
+  username: string;
+  role: 'ADMIN' | 'PLANNER' | 'VIEWER';
+}
+
 export interface CorrelationStore {
   correlationId: string;
   // performance.now() değeri; süre ölçümü isteğin en başından başlar
   startedAt: number;
+  actor?: Actor;
 }
 
 // Singleton provider: isteklerin birbirinden ayrılmasını DI scope'u değil AsyncLocalStorage sağlar
@@ -24,4 +31,10 @@ export class CorrelationContextService {
   getCorrelationId(): string | undefined {
     return this.storage.getStore()?.correlationId;
   }
+
+  getActor(): Actor | undefined {
+    return this.storage.getStore()?.actor;
+  }
+
+
 }

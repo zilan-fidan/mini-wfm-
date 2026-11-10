@@ -12,11 +12,14 @@ import { TeamsModule } from './teams/teams.module';
 import { WorkforceUsersModule } from './workforce-users/workforce-users.module';
 import { AccountsModule } from './accounts/accounts.module';
 import { AuthModule } from './auth/auth.module';
+import { ShiftsModule } from './shifts/shifts.module';
+
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     CorrelationModule,
+    ShiftsModule,
 
     // workforce-service istemcisi bir kez, ayardan kurulur; isGlobal ile tüm modüllerde kullanılır
     ClientsModule.registerAsync({

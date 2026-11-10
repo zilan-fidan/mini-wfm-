@@ -5,10 +5,10 @@ import { CreateWorkforceUserDto } from './dto/create-workforce-user.dto';
 import { UpdateWorkforceUserDto } from './dto/update-workforce-user.dto';
 import { FindAllWorkforceUsersDto } from './dto/find-all-workforce-users.dto';
 import { toWorkforceUserResponse } from './workforce-user.response';
-
+import { ShiftsService } from '../shifts/shifts.service';
 @Controller()
 export class WorkforceUsersController {
-  constructor(private readonly workforceUsersService: WorkforceUsersService) {}
+  constructor(private readonly workforceUsersService: WorkforceUsersService,  private readonly shiftsService: ShiftsService,) {}
 
 
   @MessagePattern('createWorkforceUser')
@@ -93,7 +93,15 @@ export class WorkforceUsersController {
         message: 'Personel bulunamadı',
       });
     }
+const hasShifts =
+  await this.shiftsService.hasShiftsForWorkforceUser(id);
 
+  if (hasShifts) {
+    throw new RpcException({
+      statusCode: 409,
+      message: 'Vardiyası bulunan personel silinemez',
+    });
+  }
     return this.workforceUsersService.remove(workforceUser);
   }
 }
