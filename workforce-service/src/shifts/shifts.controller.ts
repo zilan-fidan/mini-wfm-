@@ -4,7 +4,7 @@ import {MessagePattern,RpcException,} from '@nestjs/microservices';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ShiftsService } from './shifts.service';
-import type { ListShiftsQuery } from './shifts.service';
+import type { CreateTeamShiftsPayload, ListShiftsQuery } from './shifts.service';
 import { validateShiftPeriod } from './utils/validate-shift-period';
 import { WorkforceUser } from '../workforce-users/entities/workforce-user.entity';
 import { CorrelationContextService } from '../common/correlation/correlation-context.service';
@@ -42,6 +42,15 @@ export class ShiftsController {
   // =====================================================
   // 1. VARDİYA OLUŞTURMA
   // =====================================================
+
+  @MessagePattern('createTeamShifts')
+  createTeamShifts(payload: CreateTeamShiftsPayload) {
+    const actor = this.correlationContext.getActor();
+    if (!actor) {
+      throw new RpcException({ statusCode: 401, message: 'İşlemi gerçekleştiren hesap doğrulanamadı' });
+    }
+    return this.shiftsService.createTeamShifts(payload, actor.id);
+  }
 
   @MessagePattern('findAllShifts')
   findAllShifts(payload: ListShiftsQuery) {
@@ -240,14 +249,12 @@ export class ShiftsController {
       });
     }
 
-    // Vardiyayı güncelle
+    // Yalnızca gönderilen alanları aktar; servis kilit altında güncel değerlerle birleştirir.
     return this.shiftsService.updateShift(shift, {
-      workforceUserId,
-      startAt,
-      endAt,
-      ...(data.note !== undefined
-        ? { note: data.note }
-        : {}),
+      ...(data.workforceUserId !== undefined ? { workforceUserId: data.workforceUserId } : {}),
+      ...(data.startAt !== undefined ? { startAt: new Date(data.startAt) } : {}),
+      ...(data.endAt !== undefined ? { endAt: new Date(data.endAt) } : {}),
+      ...(data.note !== undefined ? { note: data.note } : {}),
     });
   }
 

@@ -198,7 +198,7 @@ Her personel **en fazla bir** ekipte olabilir; bir ekibin birden çok personeli 
 | Çıkarılmak istenen personel o ekipte değil | `404` |
 | Üyesi olan bir ekip silinmek isteniyor | `409` |
 
-Tüm hata cevapları `{ "statusCode": number, "message": string }` biçimindedir ve arayüzde mesaj olarak gösterilir.
+Tüm hata cevapları `{ "statusCode": number, "message": string, "details"?: unknown }` biçimindedir ve arayüzde mesaj olarak gösterilir.
 
 ## Uçtan uca deneme
 
@@ -297,3 +297,74 @@ Doğrulama:
 Entegrasyon testi varsayılan olarak Docker Compose veritabanına (`127.0.0.1:5433/mini_wfm`)
 bağlanır; farklı test veritabanı için `SHIFTS_TEST_DATABASE_URL` kullanılır.
 Test kendi benzersiz şemasını oluşturup sonunda kaldırır; bağlantı kullanıcısının şema oluşturma yetkisi gerekir.
+
+
+### Ekibin aktif üyelerine toplu vardiya
+
+`POST /api/teams/:id/shifts` (ADMIN, PLANNER)
+
+```json
+{
+  "startAt": "2099-01-01T08:00:00+03:00",
+  "endAt": "2099-01-01T16:00:00+03:00",
+  "note": "Ekip vardiyası"
+}
+```
+
+Mevcut vardiya kuralları geçerlidir: tarihler saat dilimi içermeli, başlangıç geçmişte olmamalı,
+süre 1–12 saat olmalıdır. Başarıda 201 ile oluşturulan vardiyaların listesi döner.
+`createdById` doğrulanmış actor bağlamından alınır; gövdeden kabul edilmez.
+Ekip yoksa 404; ekip pasifse veya aktif üyesi yoksa 409 döner. Pasif üyeler işleme alınmaz.
+Aktif üyelerden herhangi birinin vardiyası kesişiyorsa hiçbir yeni vardiya yazılmaz.
+Çakışan tüm personeller birer kez listelenir:
+
+```json
+{
+  "statusCode": 409,
+  "message": "Bazı personellerin vardiyaları çakışıyor",
+  "details": [
+    { "workforceUserId": 1, "registrationNumber": "001", "firstname": "Ada", "lastname": "Yılmaz" },
+    { "workforceUserId": 2, "registrationNumber": "002", "firstname": "Ali", "lastname": "Demir" }
+  ]
+}
+```
+
+`details` opsiyoneldir; verilmediğinde eski `{ statusCode, message }` yanıtı korunur.
+
+**Transaction nasıl çalışır?** Ekip ve aktif üyeler okunur, tüm üyelerin çakışmaları tek sorguda
+kontrol edilir ve kayıtlar aynı transaction manager üzerinden alınan repository ile yazılır.
+Callback başarıyla biterse commit; hata fırlatırsa rollback olur. Ekip ve aktif üye satırlarına
+alınan yazma kilitleri transaction bitene kadar tutulur; aynı ekibe eşzamanlı toplu istekler sıraya girer.
+Tekil oluşturma, toplu oluşturma ve güncelleme yollarının tümü aynı personel satırlarında
+`pessimistic_write` kilidi kullanır. Transaction'lar açıkça `READ COMMITTED` seviyesindedir:
+kilidi bekleyen işlem, kilidi aldıktan sonra çakışma sorgusunda önceki işlemin commit ettiği vardiyayı görür.
+Personel birden fazlaysa kilitler ID artan sırada alınır. Güncellemede önce vardiyanın güncel hali
+kilitlenerek okunur, sonra eski/yeni personeller sıralı kilitlenir; çakışma kontrolü kendi vardiyasını dışlar.
+Kontrol ve kayıt arasında transaction sona ermez. Controller kontrolleri ön kontroldür;
+kesin kontroller transaction içindeki servis metodunda yeniden yapılır.
+Güncellemede yalnızca gönderilen alanlar aktarılır; gönderilmeyenler kilitli güncel kayıttan korunur.
+Bu garanti uygulamanın bu servis yolları içindir; doğrudan SQL yazan başka bir işlem de aynı
+kilit protokolüne uymalıdır. Veritabanına tüm kaynaklardan yazmayı korumak için ayrıca bir
+PostgreSQL exclusion constraint gerekir.
+
+**Mentora anlatım:** Transaction olmadan üyeleri sırayla kaydetseydik ilk iki kayıt başarılı olup
+üçüncüde hata oluştuğunda ilk iki kayıt veritabanında kalabilirdi. Önceden çakışma kontrolü yapmak,
+kayıt sırasında oluşabilecek veritabanı hatalarına karşı yeterli değildir. Transaction, bütün
+kayıtları tek iş birimi yapar: son kayıtta hata olsa bile tamamı geri alınır. Bu nedenle callback
+içinde normal repository yerine transaction manager'ın repository'leri kullanılır.
+
+Testler:
+
+- `cd api && npm test -- --runInBand src/teams/team-shifts.spec.ts src/common/filters/all-exceptions.filter.spec.ts`
+- `cd workforce-service && npm test -- --runInBand src/shifts/team-shifts.spec.ts`
+- PostgreSQL: `cd workforce-service && npm test -- --runInBand src/shifts/shifts-list.integration.spec.ts`
+
+PostgreSQL testi birden fazla çakışan üyeyi, hiçbir yeni kayıt yazılmamasını, kayıt hatasında rollback'i,
+pasif üyelerin dışlanmasını ve eşzamanlı toplu istekleri kapsar. Önceki bölümdeki test bağlantısını kullanır.
+
+
+Ortak kilitleme birim testleri:
+`cd workforce-service && npm test -- --runInBand src/shifts/shift-locking.spec.ts`
+
+PostgreSQL entegrasyon dosyası ayrıca tekil–tekil, tekil–toplu, güncelleme–oluşturma,
+güncelleme–güncelleme ve personel değiştirme–oluşturma yarışlarını kapsar.

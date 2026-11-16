@@ -15,6 +15,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         response,
         exception.getStatus(),
         this.extractHttpMessage(exception),
+        this.extractDetails(exception.getResponse()),
       );
     }
 
@@ -29,7 +30,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     // Durum 1: workforce-service'ten gelen hata → servisin kodu ve mesajı
     if (this.isServiceError(exception)) {
-      return this.send(response, exception.statusCode, exception.message);
+      return this.send(response, exception.statusCode, exception.message, exception.details);
     }
 
     // Durum 4: diğer her şey → 500, ayrıntı sadece loga
@@ -49,9 +50,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
     );
   }
 
-  // P2: hata yanıtı her zaman { statusCode, message }
-  private send(response: Response, statusCode: number, message: string) {
-    return response.status(statusCode).json({ statusCode, message });
+  // P2: details yalnızca sağlandığında yanıta eklenir.
+  private send(response: Response, statusCode: number, message: string, details?: unknown) {
+    return response.status(statusCode).json({ statusCode, message, ...(details !== undefined ? { details } : {}) });
+  }
+
+  private extractDetails(body: unknown): unknown {
+    return typeof body === 'object' && body !== null && 'details' in body
+      ? body.details : undefined;
   }
 
   // HttpException'ın içindeki mesajı tek bir metne çevirir
@@ -79,7 +85,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
   private isServiceError(
     exception: unknown,
-  ): exception is { statusCode: number; message: string } {
+  ): exception is { statusCode: number; message: string; details?: unknown } {
     const err = exception as any;
     return (
       typeof err?.statusCode === 'number' && typeof err?.message === 'string'

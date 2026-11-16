@@ -1,11 +1,25 @@
+// Varlıklar (entity) ve yardımcı fonksiyonlar
+import { Team } from '../teams/entities/team.entity';
+import { WorkforceUser } from '../workforce-users/entities/workforce-user.entity';
+import { validateShiftPeriod } from './utils/validate-shift-period';
 
+// NestJS, class-validator ve TypeORM bağımlılıkları
 import { RpcException } from '@nestjs/microservices';
 import { isISO8601 } from 'class-validator';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { Shift } from './entities/shift.entity';
 
+// Ekibe toplu vardiya atama isteğinin giriş verisi.
+export type CreateTeamShiftsPayload = {
+  teamId: number;
+  startAt: string;
+  endAt: string;
+  note?: string | null;
+};
+
+// Vardiya listeleme filtreleri; personel ve ekip filtresi opsiyoneldir.
 export type ListShiftsQuery = {
   from: string;
   to: string;
@@ -13,6 +27,7 @@ export type ListShiftsQuery = {
   teamId?: number;
 };
 
+// Vardiya iş mantığını (oluşturma, listeleme, güncelleme, silme, çakışma kontrolü) yöneten servis.
 @Injectable()
 export class ShiftsService {
   constructor(
@@ -20,7 +35,82 @@ export class ShiftsService {
     private readonly shiftRepository: Repository<Shift>,
   ) {}
 
+  // Bir ekibin tüm aktif üyelerine aynı vardiyayı tek transaction içinde atar.
+  // Herhangi bir üyede çakışma varsa hiçbir vardiya oluşturulmaz.
+  async createTeamShifts(payload: CreateTeamShiftsPayload, createdById: number): Promise<Shift[]> {
+    // Girdi doğrulama: ekip ID'si ve tarih aralığı kontrol edilir.
+    if (!Number.isInteger(payload.teamId) || payload.teamId <= 0) {
+      throw new RpcException({ statusCode: 400, message: 'Geçersiz ekip ID değeri' });
+    }
+    const startAt = new Date(payload.startAt);
+    const endAt = new Date(payload.endAt);
+    validateShiftPeriod(startAt, endAt, { checkPast: true });
+
+    // Tüm okumalar ve yazmalar aynı transaction manager üzerinden yapılır.
+    return this.shiftRepository.manager.transaction('READ COMMITTED', async (manager) => {
+      const teamRepository = manager.getRepository(Team);
+      const memberRepository = manager.getRepository(WorkforceUser);
+      const shiftRepository = manager.getRepository(Shift);
+
+      // Ekip kilitlenerek okunur; ekip yoksa 404, pasifse 409 döner.
+      const team = await teamRepository.findOne({
+        where: { id: payload.teamId }, lock: { mode: 'pessimistic_write' },
+      });
+      if (!team) {
+        throw new RpcException({ statusCode: 404, message: 'Ekip bulunamadı' });
+      }
+      if (!team.isActive) {
+        throw new RpcException({ statusCode: 409, message: 'Pasif ekibe vardiya atanamaz' });
+      }
+
+      // Ekibin aktif üyeleri ID sırasıyla kilitlenerek getirilir (sıralı kilit deadlock'u önler).
+      const members = await memberRepository.createQueryBuilder('person')
+        .where('person.teamId = :teamId', { teamId: team.id })
+        .andWhere('person.isActive = :isActive', { isActive: true })
+        .orderBy('person.id', 'ASC')
+        .setLock('pessimistic_write')
+        .getMany();
+      if (members.length === 0) {
+        throw new RpcException({ statusCode: 409, message: 'Ekibin aktif üyesi yok' });
+      }
+
+      // Üyelerden hangilerinin bu aralıkta zaten vardiyası var, tek sorguda tespit edilir.
+      const overlaps = await shiftRepository.createQueryBuilder('shift')
+        .select('shift.workforceUserId', 'workforceUserId')
+        .distinct(true)
+        .where('shift.workforceUserId IN (:...ids)', { ids: members.map((member) => member.id) })
+        .andWhere('shift.startAt < :endAt', { endAt })
+        .andWhere('shift.endAt > :startAt', { startAt })
+        .getRawMany<{ workforceUserId: number }>();
+
+      // Çakışan personel varsa, kimlerin çakıştığı bilgisiyle birlikte 409 hatası fırlatılır.
+      const conflictingIds = new Set(overlaps.map((row) => row.workforceUserId));
+      const conflicts = members.filter((member) => conflictingIds.has(member.id));
+      if (conflicts.length > 0) {
+        throw new RpcException({
+          statusCode: 409,
+          message: 'Bazı personellerin vardiyaları çakışıyor',
+          details: conflicts.map((member) => ({
+            workforceUserId: member.id,
+            registrationNumber: member.registrationNumber,
+            firstname: member.firstname,
+            lastname: member.lastname,
+          })),
+        });
+      }
+
+      // Her üye için vardiya oluşturulup kaydedilir.
+      const shifts = members.map((member) => shiftRepository.create({
+        workforceUserId: member.id, startAt, endAt, note: payload.note ?? null, createdById,
+      }));
+      // Sonraki bir kayıt hata verirse öncekiler de rollback edilir.
+      return shiftRepository.save(shifts);
+    });
+  }
+
+  // Tarih aralığıyla kesişen vardiyaları listeler; personel ve ekip filtresi opsiyoneldir.
   async findAllShifts(filters: ListShiftsQuery): Promise<Shift[]> {
+    // Girdi doğrulama: ISO 8601 formatı, pozitif ve en fazla 31 günlük aralık, geçerli ID'ler.
     const from = new Date(filters.from);
     const to = new Date(filters.to);
     const duration = to.getTime() - from.getTime();
@@ -35,6 +125,7 @@ export class ShiftsService {
       throw new RpcException({ statusCode: 400, message: 'Geçersiz filtre; tarih aralığı pozitif olmalı ve 31 günü aşmamalıdır' });
     }
 
+    // Ana sorgu: personel ve ekip bilgisiyle birlikte, aralıkla kesişen vardiyalar başlangıç zamanına göre sıralı gelir.
     const query = this.shiftRepository.createQueryBuilder('shift')
       .leftJoin('shift.workforceUser', 'person')
       .leftJoin('person.team', 'team')
@@ -44,6 +135,7 @@ export class ShiftsService {
       .orderBy('shift.startAt', 'ASC')
       .addOrderBy('shift.id', 'ASC');
 
+    // Opsiyonel filtreler sorguya eklenir.
     if (filters.workforceUserId !== undefined) {
       query.andWhere('shift.workforceUserId = :workforceUserId', { workforceUserId: filters.workforceUserId });
     }
@@ -53,10 +145,19 @@ export class ShiftsService {
     return query.getMany();
   }
 
-  // Yeni vardiyayı veritabanına kaydeder.
+  // Çakışma kontrolü ve kayıt, personel kilidi bırakılmadan tamamlanır.
   async createShift(data: Partial<Shift>): Promise<Shift> {
-    const shift = this.shiftRepository.create(data);
-    return this.shiftRepository.save(shift);
+    return this.shiftRepository.manager.transaction('READ COMMITTED', async (manager) => {
+      // Personel kilitlenir, aktif olduğu ve tarih aralığının geçerli olduğu doğrulanır.
+      const person = await this.lockPeople(manager, [data.workforceUserId!]);
+      this.requireActivePerson(person, data.workforceUserId!);
+      validateShiftPeriod(data.startAt!, data.endAt!, { checkPast: true });
+
+      // Çakışma yoksa vardiya kaydedilir.
+      const repository = manager.getRepository(Shift);
+      await this.assertNoOverlap(repository, data.workforceUserId!, data.startAt!, data.endAt!);
+      return repository.save(repository.create(data));
+    });
   }
 
   // Vardiyayı ID üzerinden bulur.
@@ -66,13 +167,74 @@ export class ShiftsService {
     });
   }
 
-  // Vardiyayı veritabanında günceller.
-  async updateShift(
-    shift: Shift,
-    data: Partial<Shift>,
-  ): Promise<Shift> {
-    const updatedShift = this.shiftRepository.merge(shift, data);
-    return this.shiftRepository.save(updatedShift);
+  // İstemcinin/controller'ın eski kopyasını değil, kilitli güncel kaydı kullanır.
+  async updateShift(shift: Shift, data: Partial<Shift>): Promise<Shift> {
+    return this.shiftRepository.manager.transaction('READ COMMITTED', async (manager) => {
+      // Güncellenecek vardiyanın güncel hali kilitli olarak okunur; yoksa 404.
+      const repository = manager.getRepository(Shift);
+      const current = await repository.findOne({
+        where: { id: shift.id }, lock: { mode: 'pessimistic_write' },
+      });
+      if (!current) {
+        throw new RpcException({ statusCode: 404, message: 'Vardiya bulunamadı' });
+      }
+
+      // Personel değişirken eski ve yeni personel daima ID sırasıyla kilitlenir.
+      const workforceUserId = data.workforceUserId ?? current.workforceUserId;
+      const people = await this.lockPeople(manager, [current.workforceUserId, workforceUserId]);
+      this.requireActivePerson(people, workforceUserId);
+
+      // Geçmişteki vardiya güncellenemez.
+      if (current.startAt.getTime() < Date.now()) {
+        throw new RpcException({ statusCode: 409, message: 'Geçmişteki vardiya güncellenemez' });
+      }
+
+      // Yeni tarihler doğrulanır, kendisi hariç çakışma kontrolü yapılır ve değişiklikler kaydedilir.
+      const startAt = data.startAt ?? current.startAt;
+      const endAt = data.endAt ?? current.endAt;
+      validateShiftPeriod(startAt, endAt, { checkPast: true });
+      await this.assertNoOverlap(repository, workforceUserId, startAt, endAt, current.id);
+      return repository.save(repository.merge(current, data, { workforceUserId, startAt, endAt }));
+    });
+  }
+
+  // Personelleri tekrarsız ve ID sırasıyla yazma kilidiyle getirir (sıralı kilit deadlock'u önler).
+  private lockPeople(manager: EntityManager, ids: number[]): Promise<WorkforceUser[]> {
+    if (ids.some((id) => !Number.isInteger(id) || id <= 0)) {
+      throw new RpcException({ statusCode: 400, message: 'Geçersiz personel ID değeri' });
+    }
+    return manager.getRepository(WorkforceUser).createQueryBuilder('person')
+      .where('person.id IN (:...ids)', { ids: [...new Set(ids)].sort((a, b) => a - b) })
+      .orderBy('person.id', 'ASC')
+      .setLock('pessimistic_write')
+      .getMany();
+  }
+
+  // İstenen personelin listede bulunduğunu ve aktif olduğunu doğrular; değilse 404/409 fırlatır.
+  private requireActivePerson(people: WorkforceUser[], id: number): void {
+    const person = people.find((person) => person.id === id);
+    if (!person) {
+      throw new RpcException({ statusCode: 404, message: 'Personel bulunamadı' });
+    }
+    if (!person.isActive) {
+      throw new RpcException({ statusCode: 409, message: 'Pasif personele vardiya atanamaz' });
+    }
+  }
+
+  // Personelin aynı aralıkta başka vardiyası varsa 409 fırlatır.
+  // excludeShiftId verilirse (güncelleme sırasında) o vardiya kontrol dışı bırakılır.
+  private async assertNoOverlap(repository: Repository<Shift>, workforceUserId: number, startAt: Date, endAt: Date, excludeShiftId?: number): Promise<void> {
+    const query = repository.createQueryBuilder('shift')
+      .where('shift.workforceUserId = :workforceUserId', { workforceUserId })
+      .andWhere('shift.startAt < :endAt', { endAt })
+      .andWhere('shift.endAt > :startAt', { startAt });
+    if (excludeShiftId !== undefined) {
+      query.andWhere('shift.id != :excludeShiftId', { excludeShiftId });
+    }
+    const overlap = await query.getOne();
+    if (overlap) {
+      throw new RpcException({ statusCode: 409, message: `Vardiya çakışması: ${overlap.startAt.toISOString()} - ${overlap.endAt.toISOString()}` });
+    }
   }
 
   // Vardiyayı veritabanından siler.
@@ -81,6 +243,8 @@ export class ShiftsService {
   }
 
 
+// Personelin verilen aralıkla kesişen bir vardiyası varsa döndürür, yoksa null.
+// Transaction/kilit kullanmaz; yalnızca bilgi amaçlı kontrol içindir.
 async findOverlappingShift(
   workforceUserId: number,
   startAt: Date,
@@ -104,6 +268,7 @@ async findOverlappingShift(
 
   return query.getOne();
 }
+// Personelin en az bir vardiyası var mı diye hızlıca kontrol eder.
 async hasShiftsForWorkforceUser(
   workforceUserId: number,
 ): Promise<boolean> {

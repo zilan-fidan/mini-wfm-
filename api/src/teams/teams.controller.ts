@@ -1,3 +1,4 @@
+import { CreateTeamShiftsDto } from './dto/create-team-shifts.dto';
 import {Body,Controller,Delete,Get,Inject,Param,ParseIntPipe,Patch,Post,Query,} from '@nestjs/common';
 import { WORKFORCE_SERVICE } from '../constants';
 import { ClientProxy } from '@nestjs/microservices';
@@ -18,6 +19,18 @@ export class TeamsController {
   constructor(
     @Inject(WORKFORCE_SERVICE) private readonly client: ClientProxy,
   ) {}
+
+  @Roles(Role.ADMIN, Role.PLANNER)
+  @Post(':id/shifts')
+  @ApiOperation({ summary: 'Ekibin tüm aktif üyelerine atomik olarak vardiya oluşturur' })
+  @ApiParam({ name: 'id', type: Number, example: 1 })
+  @ApiCreatedResponse({ description: 'Oluşturulan vardiyaların listesi' })
+  @ApiBadRequestResponse({ description: 'Geçersiz tarih, süre veya ekip ID değeri' })
+  @ApiNotFoundResponse({ description: 'Ekip bulunamadı' })
+  @ApiConflictResponse({ description: 'Pasif ekip, aktif üye yok, geçmiş tarih veya çakışma; details çakışan personelleri içerir' })
+  createShifts(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateTeamShiftsDto) {
+    return this.client.send('createTeamShifts', { teamId: id, ...dto });
+  }
 
   @Roles(Role.ADMIN)
   @Post()

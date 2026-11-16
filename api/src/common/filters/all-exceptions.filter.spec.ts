@@ -66,4 +66,18 @@ describe('AllExceptionsFilter', () => {
     expect(response.status).toHaveBeenCalledWith(409);
     expect(errorSpy).not.toHaveBeenCalled();
   });
+  it('servisten gelen tüm çakışma detaylarını korur', () => {
+    const details = [
+      { registrationNumber: '001', firstname: 'Ada', lastname: 'Yılmaz' },
+      { registrationNumber: '002', firstname: 'Ali', lastname: 'Demir' },
+    ];
+    filter.catch({ statusCode: 409, message: 'Vardiya çakışması', details }, createHost());
+    expect(response.json).toHaveBeenCalledWith({ statusCode: 409, message: 'Vardiya çakışması', details });
+  });
+
+  it('HTTP hatasının opsiyonel details alanını korur', () => {
+    filter.catch(new ConflictException({ message: 'Çakışma', details: [] }), createHost());
+    expect(response.json).toHaveBeenCalledWith({ statusCode: 409, message: 'Çakışma', details: [] });
+  });
+
 });
