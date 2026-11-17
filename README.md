@@ -368,3 +368,73 @@ Ortak kilitleme birim testleri:
 
 PostgreSQL entegrasyon dosyası ayrıca tekil–tekil, tekil–toplu, güncelleme–oluşturma,
 güncelleme–güncelleme ve personel değiştirme–oluşturma yarışlarını kapsar.
+
+## MWFM-31 — İş Emri Durum Yönetimi ve Geçmiş Kaydı
+
+### Durum makinesi (B19)
+
+İş emirlerinin izin verilen durum geçişleri merkezi olarak
+`workforce-service/src/work-orders/constants/work-order-transitions.ts` dosyasında tanımlanır.
+
+| Mevcut durum | Yeni durum | Ek kural |
+|---|---|---|
+| `OPEN` | `ASSIGNED` | Aktif ekip ve en az bir aktif üye zorunludur. |
+| `OPEN` | `CANCELLED` | İptal nedeni zorunludur. |
+| `ASSIGNED` | `IN_PROGRESS` | Ek koşul yoktur. |
+| `ASSIGNED` | `OPEN` | Ekip ataması kaldırılır. |
+| `ASSIGNED` | `CANCELLED` | İptal nedeni zorunludur. |
+| `IN_PROGRESS` | `COMPLETED` | Ek koşul yoktur. |
+| `IN_PROGRESS` | `CANCELLED` | İptal nedeni ve ADMIN yetkisi zorunludur. |
+
+Tabloda bulunmayan geçişler `409 Conflict` hatasıyla engellenir. `OPEN → ASSIGNED`
+geçişinde ekip bulunamazsa `404`; ekip pasifse veya aktif üyesi yoksa `409` döner.
+
+### Audit log ve transaction
+
+Her durum değişikliği `workforce.work_order_status_history` tablosuna kaydedilir. Geçmiş kaydı:
+
+- İş emri ID'sini,
+- önceki ve yeni durumu,
+- ilgili ekip ID'sini,
+- değişiklik nedenini,
+- işlemi yapan hesabın ID'sini,
+- işlem zamanını
+
+içerir.
+
+İş emrinin güncellenmesi ve geçmiş kaydının eklenmesi aynı PostgreSQL transaction'ı içinde
+gerçekleştirilir. Geçmiş kaydı oluşturulamazsa durum değişikliği de rollback edilir. Yeni bir iş emri
+oluşturulduğunda ilk geçmiş kaydı `null → OPEN` olarak aynı transaction içinde oluşturulur.
+
+### Ekip pasifleştirme ve personel çıkarma kararı
+
+**Durum: Mentor onayı bekleniyor.**
+
+Karar verilmesi gereken konu, aktif iş emri bulunan bir ekibin pasifleştirilmesine veya ekipteki son
+aktif personelin çıkarılmasına izin verilip verilmeyeceğidir.
+
+Önerilen yaklaşım: `OPEN`, `ASSIGNED` veya `IN_PROGRESS` durumunda iş emri atanmış bir ekip
+pasifleştirilememeli; bu ekibin son aktif personelinin çıkarılması ya da pasifleştirilmesi de
+engellenmelidir. Böylece devam eden bir iş emri sorumlu ekipsiz veya aktif personelsiz kalmaz.
+Kural mentor değerlendirmesinden sonra kesinleştirilerek ilgili ekip ve personel işlemlerine
+uygulanacaktır.
+
+### Yeni bir iş emri durumu ekleme
+
+Yeni durum eklenirken şu bileşenler birlikte güncellenmelidir:
+
+1. `work-order-status.enum.ts`: Yeni durum tanımlanır.
+2. `work-order-transitions.ts`: İzin verilen geçişler, ek kurallar ve Türkçe durum karşılığı eklenir.
+3. PostgreSQL migration: Veritabanındaki enum tipi güncellenir.
+4. API Gateway `ChangeWorkOrderStatusDto`: Yeni durum API enum'una eklenir.
+5. Unit testler: Yeni izinli ve izinsiz geçişler test edilir.
+6. Swagger dokümantasyonu: Yeni durumun API üzerinden doğru gösterildiği kontrol edilir.
+
+### API endpoint'leri
+
+| Metot | Endpoint | Açıklama |
+|---|---|---|
+| `PATCH` | `/api/work-orders/:id/status` | İş emrinin durumunu değiştirir. |
+| `GET` | `/api/work-orders/:id/history` | Durum geçmişini eskiden yeniye listeler. |
+
+Durum geçmişi sonuçlarında işlemi yapan hesabın kullanıcı adı ile işlem zamanı da bulunur.

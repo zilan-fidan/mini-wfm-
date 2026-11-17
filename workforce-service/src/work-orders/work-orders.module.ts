@@ -5,12 +5,16 @@ import { WorkOrdersService } from './work-orders.service';
 import { WorkOrdersController } from './work-orders.controller';
 import { Team } from '../teams/entities/team.entity';
 import { CorrelationModule } from '../common/correlation/correlation.module';
+import { WorkOrderStatusHistory } from './entities/work-order-status-history.entity';
+import { WorkforceUser } from '../workforce-users/entities/workforce-user.entity';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       WorkOrder,
+      WorkOrderStatusHistory,
       Team,
+      WorkforceUser,
     ]),
     CorrelationModule,
   ],

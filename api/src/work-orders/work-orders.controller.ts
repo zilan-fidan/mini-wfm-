@@ -5,6 +5,7 @@ import { WORKFORCE_SERVICE } from '../constants';
 import {Roles, Role,} from '../auth/decorators/roles.decorator';
 import { CreateWorkOrderDto } from './dto/create-work-order.dto';
 import { UpdateWorkOrderDto } from './dto/update-work-order.dto';
+import { ChangeWorkOrderStatusDto } from './dto/change-work-order-status.dto';
 
 @ApiTags('work-orders')
 @ApiBearerAuth('access-token')
@@ -85,5 +86,36 @@ export class WorkOrdersController {
       },
     });
   }
+
+@Patch(':id/status')
+@Roles(Role.ADMIN, Role.PLANNER)
+@ApiOperation({ summary: 'İş emrinin durumunu değiştirir',})
+@ApiOkResponse({description: 'İş emrinin durumu başarıyla güncellendi',})
+@ApiBadRequestResponse({description: 'Geçersiz durum, ekip ID veya iptal nedeni',})
+@ApiConflictResponse({description: 'İzin verilmeyen durum geçişi',})
+@ApiForbiddenResponse({description: 'Bu durum geçişi için yetki yok',})
+changeStatus(
+  @Param('id', ParseIntPipe) id: number,
+  @Body() dto: ChangeWorkOrderStatusDto,
+) {
+  return this.client.send('changeWorkOrderStatus', {
+    id,
+    status: dto.status,
+    teamId: dto.teamId,
+    reason: dto.reason,
+  });
+}
+
+@Get(':id/history')
+@Roles(Role.ADMIN, Role.PLANNER, Role.VIEWER)
+@ApiOperation({ summary: 'İş emrinin durum geçmişini listeler',})
+@ApiOkResponse({description: 'Durum geçmişi eskiden yeniye sıralı döner'})
+@ApiNotFoundResponse({description: 'İş emri bulunamadı',})
+findHistory(
+  @Param('id', ParseIntPipe) id: number,
+) {
+  return this.client.send('findWorkOrderHistory', id);
+}
+
 }
   

@@ -4,9 +4,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { WorkOrdersService } from './work-orders.service';
 import { WorkOrderPriority } from './enums/work-order-priority.enum';
-import { WorkOrderStatus } from './enums/work-order-status.enum';
 import { Team } from '../teams/entities/team.entity';
 import { CorrelationContextService } from '../common/correlation/correlation-context.service';
+import { WorkOrderStatus } from './enums/work-order-status.enum';
+import {WORK_ORDER_TRANSITIONS,WORK_ORDER_STATUS_LABELS,} from './constants/work-order-transitions';
+import { Payload } from '@nestjs/microservices';
+
 
 type CreateWorkOrderPayload = {
   title: string;
@@ -274,6 +277,108 @@ async updateWorkOrder(payload: UpdateWorkOrderPayload) {
     workOrder,
     updateData,
   );
+}
+  
+@MessagePattern('changeWorkOrderStatus')
+async changeWorkOrderStatus(payload: {
+  id: number;
+  status: WorkOrderStatus;
+  teamId?: number | null;
+  reason?: string | null;
+}) {
+  const { id, status, teamId, reason } = payload;
+
+  // 1. ID kontrolü
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new RpcException({
+      statusCode: 400,
+      message: 'Geçersiz iş emri ID',
+    });
+  }
+
+  // 2. Yeni durum geçerli mi?
+  if (!Object.values(WorkOrderStatus).includes(status)) {
+    throw new RpcException({
+      statusCode: 400,
+      message: 'Geçersiz iş emri durumu',
+    });
+  }
+
+  // 3. İş emrini getir
+  const workOrder =
+    await this.workOrdersService.findOneWorkOrder(id);
+
+  if (!workOrder) {
+    throw new RpcException({
+      statusCode: 404,
+      message: 'İş emri bulunamadı',
+    });
+  }
+
+  // 4. B19: İzin verilen geçişleri kontrol et
+  const allowedStatuses =
+    WORK_ORDER_TRANSITIONS[workOrder.status];
+
+  if (!allowedStatuses.includes(status)) {
+    throw new RpcException({
+      statusCode: 409,
+      message:
+        `İş emri ${WORK_ORDER_STATUS_LABELS[workOrder.status]} ` +
+        `durumundan ${WORK_ORDER_STATUS_LABELS[status]} ` +
+        `durumuna alınamaz`,
+    });
+  }
+
+  // 5. Reason kontrolü
+  if (reason !== undefined && reason !== null) {
+    if (typeof reason !== 'string' || reason.length > 500) {
+      throw new RpcException({
+        statusCode: 400,
+        message: 'Reason en fazla 500 karakter olabilir',
+      });
+    }
+  }
+
+  // 6. İşlemi yapan kullanıcıyı al
+  const actor = this.correlationContext.getActor();
+
+  if (!actor) {
+    throw new RpcException({
+      statusCode: 401,
+      message: 'Kullanıcı bilgisi bulunamadı',
+    });
+  }
+
+return this.workOrdersService.changeWorkOrderStatus(
+  id,
+  status,
+  teamId,
+  reason,
+  actor.id,
+  actor.role,
+);
+}
+
+@MessagePattern('findWorkOrderHistory')
+async findWorkOrderHistory(@Payload() id: number) {
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new RpcException({
+      statusCode: 400,
+      message: 'Geçersiz iş emri ID',
+    });
+  }
+
+  const workOrder =
+    await this.workOrdersService.findOneWorkOrder(id);
+
+  if (!workOrder) {
+    throw new RpcException({
+      statusCode: 404,
+      message: 'İş emri bulunamadı',
+    });
+  }
+
+  return this.workOrdersService.findWorkOrderHistory(id);
 }
 
 }
