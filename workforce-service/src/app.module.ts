@@ -11,6 +11,7 @@ import { CorrelationModule } from './common/correlation/correlation.module';
 import { RpcLoggingInterceptor } from './common/correlation/rpc-logging.interceptor';
 import { AccountsModule } from './account/accounts.module';
 import { ShiftsModule } from './shifts/shifts.module';
+import { WorkOrdersModule } from './work-orders/work-orders.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { ShiftsModule } from './shifts/shifts.module';
     CorrelationModule,
     AccountsModule,
     ShiftsModule,
+    WorkOrdersModule,
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService<WorkforceEnv, true>) => ({

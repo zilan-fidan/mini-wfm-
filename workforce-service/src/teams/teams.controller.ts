@@ -5,10 +5,12 @@ import { CreateTeamDto } from '../teams/dto/create-team.dto';
 import { UpdateTeamDto } from '../teams/dto/update-team.dto';
 import { FindAllTeamsDto } from '../teams/dto/find-all-teams.dto';
 import { toWorkforceUserResponse } from '../workforce-users/workforce-user.response';
+import { WorkOrdersService } from '../work-orders/work-orders.service';
 
 @Controller()
 export class TeamsController {
-  constructor(private readonly teamsService: TeamsService) {}
+  constructor(private readonly teamsService: TeamsService,
+    private readonly workOrdersService: WorkOrdersService,) {}
 
 
   @MessagePattern('createTeam')
@@ -94,7 +96,16 @@ export class TeamsController {
         message: `Ekipte ${memberCount} personel var. Silmeden önce personelleri ekipten çıkarın`,
       });
     }
+    
+    const hasOpenWorkOrders =
+    await this.workOrdersService.hasOpenWorkOrdersForTeam(id);
 
+    if (hasOpenWorkOrders) {
+     throw new RpcException({
+       statusCode: 409,
+       message: 'Açık iş emri bulunan ekip silinemez',
+     });
+    }   
     return this.teamsService.remove(team);
   }
 
