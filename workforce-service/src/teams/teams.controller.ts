@@ -4,6 +4,7 @@ import { TeamsService } from '../teams/teams.service';
 import { CreateTeamDto } from '../teams/dto/create-team.dto';
 import { UpdateTeamDto } from '../teams/dto/update-team.dto';
 import { FindAllTeamsDto } from '../teams/dto/find-all-teams.dto';
+import { toWorkforceUserResponse } from '../workforce-users/workforce-user.response';
 
 @Controller()
 export class TeamsController {
@@ -16,7 +17,7 @@ export class TeamsController {
    
     if (existing) {
       throw new RpcException({
-        statusCode: HttpStatus.BAD_REQUEST,
+        statusCode: HttpStatus.CONFLICT,
         message: 'Bu isimde bir ekip zaten var',
       });
     }
@@ -33,7 +34,7 @@ export class TeamsController {
 
   @MessagePattern('findOneTeam')
   async findOne(@Payload() id: number) {
-    const team = await this.teamsService.findOne(id);
+    const team = await this.teamsService.findOneWithMembers(id);
 
     if (!team) {
       throw new RpcException({
@@ -85,6 +86,107 @@ export class TeamsController {
       });
     }
 
+    const memberCount = await this.teamsService.countMembers(id);
+
+    if (memberCount > 0) {
+      throw new RpcException({
+        statusCode: HttpStatus.CONFLICT,
+        message: `Ekipte ${memberCount} personel var. Silmeden önce personelleri ekipten çıkarın`,
+      });
+    }
+
     return this.teamsService.remove(team);
+  }
+
+
+  @MessagePattern('addTeamMember')
+  async addMember(@Payload() payload: { teamId: number; workforceUserId: number }) {
+    const { teamId, workforceUserId } = payload;
+
+    const team = await this.getTeamOrThrow(teamId);
+    const workforceUser = await this.getWorkforceUserOrThrow(workforceUserId);
+
+    if (!team.isActive) {
+      throw new RpcException({
+        statusCode: HttpStatus.CONFLICT,
+        message: 'Pasif bir ekibe personel eklenemez',
+      });
+    }
+
+    if (!workforceUser.isActive) {
+      throw new RpcException({
+        statusCode: HttpStatus.CONFLICT,
+        message: 'Pasif bir personel ekibe eklenemez',
+      });
+    }
+
+    if (workforceUser.team) {
+      throw this.alreadyInTeamException(workforceUser.team.name);
+    }
+
+    const added = await this.teamsService.addMember(teamId, workforceUserId);
+
+    if (!added) {
+      // Kontrolden sonra başka bir istek personeli bir ekibe atamış
+      const current = await this.teamsService.findWorkforceUserWithTeam(workforceUserId);
+      throw this.alreadyInTeamException(current?.team?.name ?? 'başka bir');
+    }
+
+    const updated = await this.teamsService.findWorkforceUserWithTeam(workforceUserId);
+    return toWorkforceUserResponse(updated!);
+  }
+
+
+  @MessagePattern('removeTeamMember')
+  async removeMember(@Payload() payload: { teamId: number; workforceUserId: number }) {
+    const { teamId, workforceUserId } = payload;
+
+    await this.getTeamOrThrow(teamId);
+    const workforceUser = await this.getWorkforceUserOrThrow(workforceUserId);
+
+    if (workforceUser.teamId !== teamId) {
+      throw new RpcException({
+        statusCode: HttpStatus.NOT_FOUND,
+        message: 'Personel bu ekipte değil',
+      });
+    }
+
+    return this.teamsService.removeMember(teamId, workforceUserId);
+  }
+
+
+  private async getTeamOrThrow(id: number) {
+    const team = await this.teamsService.findOne(id);
+
+    if (!team) {
+      throw new RpcException({
+        statusCode: HttpStatus.NOT_FOUND,
+        message: 'Ekip bulunamadı',
+      });
+    }
+
+    return team;
+  }
+
+
+  private async getWorkforceUserOrThrow(id: number) {
+    const workforceUser = await this.teamsService.findWorkforceUserWithTeam(id);
+
+    if (!workforceUser) {
+      throw new RpcException({
+        statusCode: HttpStatus.NOT_FOUND,
+        message: 'Personel bulunamadı',
+      });
+    }
+
+    return workforceUser;
+  }
+
+
+  private alreadyInTeamException(teamName: string) {
+    return new RpcException({
+      statusCode: HttpStatus.CONFLICT,
+      message: `Personel zaten "${teamName}" ekibinde`,
+    });
   }
 }
