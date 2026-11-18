@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { getTeam } from '../api/teams.api';
 import TeamFormModal from '../components/TeamFormModal';
+import TeamMembersCard from '../components/TeamMembersCard';
 
 const formatDate = (value: string) => dayjs(value).format('DD.MM.YYYY HH:mm');
 
@@ -13,7 +14,7 @@ export default function TeamDetailPage() {
   const navigate = useNavigate();
   const [modalOpen, setModalOpen] = useState(false);
 
-  const { data: team, isLoading, isError } = useQuery({
+  const { data: team, isLoading, isFetching, isError } = useQuery({
     // 'teams' ile başlıyor: modaldaki invalidateQueries(['teams']) bunu da yeniler
     queryKey: ['teams', 'detail', id],
     queryFn: () => getTeam(id!),
@@ -77,6 +78,8 @@ export default function TeamDetailPage() {
               {formatDate(team.updatedAt)}
             </Descriptions.Item>
           </Descriptions>
+
+          <TeamMembersCard team={team} loading={isFetching} />
 
           <TeamFormModal
             open={modalOpen}

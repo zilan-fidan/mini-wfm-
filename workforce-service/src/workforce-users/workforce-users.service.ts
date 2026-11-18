@@ -23,6 +23,7 @@ export class WorkforceUsersService {
   async findOne(id: number): Promise<WorkforceUser | null> {
     return await this.workforceUserRepository.findOne({
       where: { id },
+      relations: { team: true },
     });
   }
 
@@ -49,6 +50,7 @@ export class WorkforceUsersService {
 
     const [items, total] = await this.workforceUserRepository.findAndCount({
       where,
+      relations: { team: true },
       order: { createdAt: 'DESC', id: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,
