@@ -1,17 +1,11 @@
 import { http } from './http';
 import type { PaginatedResponse } from '../types/pagination';
-import type {
-  CreateTeamPayload,
-  ListTeamsParams,
-  Team,
-  UpdateTeamPayload,
-} from '../types/team';
+import type {CreateTeamPayload,ListTeamsParams,Team,UpdateTeamPayload,} from '../types/team';
 
 export async function listTeams(
   params?: ListTeamsParams,
 ): Promise<PaginatedResponse<Team>> {
-  const { data } = await http.get<PaginatedResponse<Team>>('/teams', {
-    params,
+  const { data } = await http.get<PaginatedResponse<Team>>('/teams', {params,
   });
   return data;
 }
