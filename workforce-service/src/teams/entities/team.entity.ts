@@ -1,4 +1,5 @@
-import {Column,CreateDateColumn, Entity,PrimaryGeneratedColumn,UpdateDateColumn,} from 'typeorm';
+import {Column,CreateDateColumn, Entity,OneToMany,PrimaryGeneratedColumn,UpdateDateColumn,} from 'typeorm';
+import { WorkforceUser } from '../../workforce-users/entities/workforce-user.entity';
 
 @Entity({ schema: 'workforce', name: 'team' })
 export class Team {
@@ -19,4 +20,8 @@ export class Team {
 
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
+
+  // Ekibin personelleri; sadece ekip detayında yüklenir
+  @OneToMany(() => WorkforceUser, (workforceUser) => workforceUser.team)
+  members: WorkforceUser[];
 }
