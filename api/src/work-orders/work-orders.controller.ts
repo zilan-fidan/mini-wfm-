@@ -1,4 +1,4 @@
-import {Body, Controller,Get,Inject,Param, ParseIntPipe,Patch,Post,} from '@nestjs/common';
+import {Body, Controller,Get,Inject,Param, ParseIntPipe,Patch,Post,Query,} from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { ApiBadRequestResponse,ApiBearerAuth, ApiConflictResponse,ApiCreatedResponse,ApiForbiddenResponse,ApiNotFoundResponse,ApiOkResponse,ApiOperation, ApiParam, ApiTags, ApiUnauthorizedResponse,} from '@nestjs/swagger';
 import { WORKFORCE_SERVICE } from '../constants';
@@ -6,6 +6,7 @@ import {Roles, Role,} from '../auth/decorators/roles.decorator';
 import { CreateWorkOrderDto } from './dto/create-work-order.dto';
 import { UpdateWorkOrderDto } from './dto/update-work-order.dto';
 import { ChangeWorkOrderStatusDto } from './dto/change-work-order-status.dto';
+import { ListWorkOrdersQueryDto } from './dto/list-work-orders-query.dto';
 
 @ApiTags('work-orders')
 @ApiBearerAuth('access-token')
@@ -30,6 +31,28 @@ export class WorkOrdersController {
   @ApiForbiddenResponse({ description: 'Bu işlem için yetkiniz yok',})
   create(@Body() dto: CreateWorkOrderDto) {
     return this.client.send('createWorkOrder', dto);
+  }
+
+  // ==========================================
+  // İŞ EMRİ LİSTESİ
+  // ==========================================
+
+  @Roles(Role.ADMIN, Role.PLANNER, Role.VIEWER)
+  @Get()
+  @ApiOperation({
+    summary: 'İş emirlerini filtreli, sıralı ve sayfalı listeler',
+    description:
+      'Yetkili roller: ADMIN, PLANNER, VIEWER. ' +
+      'status birden fazla verilebilir (?status=OPEN&status=ASSIGNED). ' +
+      'priority sıralaması önem sırasına göredir (URGENT > HIGH > MEDIUM > LOW). ' +
+      'Varsayılan sıralama: createdAt desc.',
+  })
+  @ApiOkResponse({ description: 'İş emri listesi; her kayıtta team (id, name) ve isOverdue bulunur' })
+  @ApiBadRequestResponse({ description: 'Geçersiz query parametresi (ör. izin verilmeyen sortBy)' })
+  @ApiUnauthorizedResponse({ description: 'Token eksik veya geçersiz' })
+  @ApiForbiddenResponse({ description: 'Bu işlem için yetkiniz yok' })
+  findAll(@Query() query: ListWorkOrdersQueryDto) {
+    return this.client.send('findAllWorkOrders', query);
   }
 
   // ==========================================

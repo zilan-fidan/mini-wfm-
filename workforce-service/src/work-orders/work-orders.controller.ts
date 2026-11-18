@@ -9,6 +9,7 @@ import { CorrelationContextService } from '../common/correlation/correlation-con
 import { WorkOrderStatus } from './enums/work-order-status.enum';
 import {WORK_ORDER_TRANSITIONS,WORK_ORDER_STATUS_LABELS,} from './constants/work-order-transitions';
 import { Payload } from '@nestjs/microservices';
+import { FindAllWorkOrdersDto } from './dto/find-all-work-orders.dto';
 
 
 type CreateWorkOrderPayload = {
@@ -357,6 +358,11 @@ return this.workOrdersService.changeWorkOrderStatus(
   actor.id,
   actor.role,
 );
+}
+
+@MessagePattern('findAllWorkOrders')
+findAllWorkOrders(@Payload() query: FindAllWorkOrdersDto) {
+  return this.workOrdersService.findAllWorkOrders(query);
 }
 
 @MessagePattern('findWorkOrderHistory')

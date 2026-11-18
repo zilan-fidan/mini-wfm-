@@ -8,6 +8,8 @@ import { RpcException } from '@nestjs/microservices';
 import {WORK_ORDER_TRANSITIONS,WORK_ORDER_STATUS_LABELS,} from './constants/work-order-transitions';
 import { Team } from '../teams/entities/team.entity';
 import { WorkforceUser } from '../workforce-users/entities/workforce-user.entity';
+import { FindAllWorkOrdersDto } from './dto/find-all-work-orders.dto';
+import {IS_OVERDUE_SQL,WORK_ORDER_ALIAS,resolveSortDirection,resolveWorkOrderSortColumn,} from './constants/work-order-list';
 
 
 
@@ -59,6 +61,83 @@ async createWorkOrder(
     return savedWorkOrder;
   });
 }
+
+  // Filtreli, sıralı, sayfalı liste; her kayıtta ekip ve hesaplanan isOverdue bulunur
+  async findAllWorkOrders(query: FindAllWorkOrdersDto) {
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      status,
+      priority,
+      teamId,
+      overdue,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = query;
+
+    // Beyaz liste dışındaki değerler 400; SQL'e yalnızca sabit ifadeler gider
+    const sortColumn = resolveWorkOrderSortColumn(sortBy);
+    const direction = resolveSortDirection(sortOrder);
+
+    const qb = this.workOrderRepository
+      .createQueryBuilder(WORK_ORDER_ALIAS)
+      .leftJoin(`${WORK_ORDER_ALIAS}.team`, 'team')
+      .addSelect(['team.id', 'team.name'])
+      .addSelect(IS_OVERDUE_SQL, 'is_overdue');
+
+    // Kullanıcı değerleri her zaman parametre olarak gider
+    if (search) {
+      qb.andWhere('(wo.code ILIKE :search OR wo.title ILIKE :search)', {
+        search: `%${search}%`,
+      });
+    }
+
+    if (status?.length) {
+      qb.andWhere('wo.status IN (:...status)', { status });
+    }
+
+    if (priority) {
+      qb.andWhere('wo.priority = :priority', { priority });
+    }
+
+    if (teamId) {
+      qb.andWhere('wo.teamId = :teamId', { teamId });
+    }
+
+    if (overdue === true) {
+      qb.andWhere(IS_OVERDUE_SQL);
+    }
+
+    const total = await qb.getCount();
+
+    // id ikinci sıralama: aynı değerli kayıtlar sayfalar arasında kaymaz.
+    // ManyToOne join satır çoğaltmadığı için offset/limit güvenli ve raw[i] ↔ entities[i] eşleşir
+    const { entities, raw } = await qb
+      .orderBy(sortColumn, direction)
+      .addOrderBy('wo.id', direction)
+      .offset((page - 1) * limit)
+      .limit(limit)
+      .getRawAndEntities<{ is_overdue: boolean }>();
+
+    const data = entities.map((workOrder, index) => ({
+      id: workOrder.id,
+      code: workOrder.code,
+      title: workOrder.title,
+      description: workOrder.description,
+      status: workOrder.status,
+      priority: workOrder.priority,
+      dueAt: workOrder.dueAt,
+      createdAt: workOrder.createdAt,
+      updatedAt: workOrder.updatedAt,
+      team: workOrder.team
+        ? { id: workOrder.team.id, name: workOrder.team.name }
+        : null,
+      isOverdue: raw[index]?.is_overdue === true,
+    }));
+
+    return { data, total, page, limit };
+  }
 
   // 2. ID ile iş emri bulma
   async findOneWorkOrder(id: number, ): Promise<WorkOrder | null> {
