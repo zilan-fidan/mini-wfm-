@@ -1,3 +1,5 @@
+import type { WorkforceUser } from './workforce-user';
+
 export type Team = {
   id: number;
   name: string;
@@ -5,6 +7,11 @@ export type Team = {
   isActive: boolean;
   createdAt: string; // JSON'da tarih metindir
   updatedAt: string;
+};
+
+// Ekip detayı (GET /teams/:id) üyeleriyle birlikte gelir
+export type TeamDetail = Team & {
+  members: WorkforceUser[];
 };
 
 export type CreateTeamPayload = {
