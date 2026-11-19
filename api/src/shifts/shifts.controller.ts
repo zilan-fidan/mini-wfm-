@@ -43,7 +43,7 @@ export class ShiftsController {
   })
   @ApiNotFoundResponse({ description: 'Personel bulunamadı' })
   @ApiConflictResponse({
-    description: 'Geçmiş tarih, pasif personel veya vardiya çakışması',
+    description: 'Geçmiş tarih, pasif personel, vardiya çakışması veya çalışma kuralı ihlali (REST, WEEKLY_LIMIT, CONSECUTIVE_DAYS); details ihlalleri listeler',
   })
   @ApiUnauthorizedResponse({ description: 'Token eksik veya geçersiz' })
   @ApiForbiddenResponse({ description: 'Bu işlem için yetkiniz yok' })
@@ -84,7 +84,7 @@ export class ShiftsController {
     description: 'Vardiya veya personel bulunamadı',
   })
   @ApiConflictResponse({
-    description: 'Geçmiş vardiya, pasif personel veya çakışma',
+    description: 'Geçmiş vardiya, pasif personel, çakışma veya çalışma kuralı ihlali; details ihlalleri listeler',
   })
   @ApiUnauthorizedResponse({ description: 'Token eksik veya geçersiz' })
   @ApiForbiddenResponse({ description: 'Bu işlem için yetkiniz yok' })

@@ -17,8 +17,10 @@ describe('Ekibe vardiya oluşturma', () => {
   beforeEach(() => {
     membersQuery = builder(['where', 'andWhere', 'orderBy', 'setLock', 'getMany']);
     membersQuery.getMany.mockResolvedValue(members);
-    overlapsQuery = builder(['select', 'distinct', 'where', 'andWhere', 'getRawMany']);
+    overlapsQuery = builder(['select', 'distinct', 'where', 'andWhere', 'getRawMany', 'getMany']);
     overlapsQuery.getRawMany.mockResolvedValue([]);
+    // Çalışma kuralı kontrolü için okunan çevredeki vardiyalar
+    overlapsQuery.getMany.mockResolvedValue([]);
     teamRepo = { findOne: jest.fn().mockResolvedValue({ id: 1, isActive: true }) };
     shiftsRepo = { createQueryBuilder: jest.fn(() => overlapsQuery), create: jest.fn((data) => data), save: jest.fn(async (rows) => rows) };
     const manager = { getRepository: jest.fn((entity) => {

@@ -10,6 +10,25 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { Shift } from './entities/shift.entity';
+import { DEFAULT_WORK_RULE_OPTIONS, MS_PER_DAY, WorkRuleViolation, checkWorkRules } from './calc/work-rules';
+
+// Kural kontrolü için yeni vardiyanın kaç gün öncesi ve sonrası okunur.
+// Hafta penceresi, 11 saat dinlenme ve 7 günlük seri bu aralığın dışına taşamaz.
+const RULE_WINDOW_MS = 7 * MS_PER_DAY;
+
+// İhlali TCP/JSON üzerinden taşınabilir, sade bir yapıya çevirir (entity'nin tüm alanları değil).
+export function toViolationDetail(violation: WorkRuleViolation) {
+  return {
+    rule: violation.rule,
+    value: violation.value,
+    message: violation.message,
+    shifts: violation.shifts.map((shift) => ({
+      ...(shift.id !== undefined && { id: shift.id }),
+      startAt: shift.startAt.toISOString(),
+      endAt: shift.endAt.toISOString(),
+    })),
+  };
+}
 
 // Ekibe toplu vardiya atama isteğinin giriş verisi.
 export type CreateTeamShiftsPayload = {
@@ -99,6 +118,32 @@ export class ShiftsService {
         });
       }
 
+      // Çalışma kuralları: tüm üyelerin ±7 günlük vardiyaları tek sorguda okunur, personele göre gruplanır.
+      const nearby = await this.findShiftsForRuleCheck(shiftRepository, members.map((member) => member.id), startAt, endAt);
+      const shiftsByPerson = new Map<number, Shift[]>();
+      for (const shift of nearby) {
+        shiftsByPerson.set(shift.workforceUserId, [...(shiftsByPerson.get(shift.workforceUserId) ?? []), shift]);
+      }
+      const ruleViolations = members
+        .map((member) => ({
+          member,
+          violations: checkWorkRules(shiftsByPerson.get(member.id) ?? [], [{ startAt, endAt }], DEFAULT_WORK_RULE_OPTIONS),
+        }))
+        .filter(({ violations }) => violations.length > 0);
+      if (ruleViolations.length > 0) {
+        throw new RpcException({
+          statusCode: 409,
+          message: 'Bazı personeller çalışma kurallarını ihlal ediyor',
+          details: ruleViolations.map(({ member, violations }) => ({
+            workforceUserId: member.id,
+            registrationNumber: member.registrationNumber,
+            firstname: member.firstname,
+            lastname: member.lastname,
+            violations: violations.map(toViolationDetail),
+          })),
+        });
+      }
+
       // Her üye için vardiya oluşturulup kaydedilir.
       const shifts = members.map((member) => shiftRepository.create({
         workforceUserId: member.id, startAt, endAt, note: payload.note ?? null, createdById,
@@ -156,6 +201,7 @@ export class ShiftsService {
       // Çakışma yoksa vardiya kaydedilir.
       const repository = manager.getRepository(Shift);
       await this.assertNoOverlap(repository, data.workforceUserId!, data.startAt!, data.endAt!);
+      await this.assertWorkRules(repository, data.workforceUserId!, data.startAt!, data.endAt!);
       return repository.save(repository.create(data));
     });
   }
@@ -194,6 +240,8 @@ export class ShiftsService {
       const endAt = data.endAt ?? current.endAt;
       validateShiftPeriod(startAt, endAt, { checkPast: true });
       await this.assertNoOverlap(repository, workforceUserId, startAt, endAt, current.id);
+      // Eski hal sorguda hariç tutulur; id de verilir ki checkWorkRules da onu eleyebilsin.
+      await this.assertWorkRules(repository, workforceUserId, startAt, endAt, current.id);
       return repository.save(repository.merge(current, data, { workforceUserId, startAt, endAt }));
     });
   }
@@ -234,6 +282,35 @@ export class ShiftsService {
     const overlap = await query.getOne();
     if (overlap) {
       throw new RpcException({ statusCode: 409, message: `Vardiya çakışması: ${overlap.startAt.toISOString()} - ${overlap.endAt.toISOString()}` });
+    }
+  }
+
+  // Personel(ler)in yeni vardiya etrafındaki ±7 günlük vardiyalarını okur; yalnızca kontrol için gereken aralık.
+  private findShiftsForRuleCheck(repository: Repository<Shift>, workforceUserIds: number[], startAt: Date, endAt: Date, excludeShiftId?: number): Promise<Shift[]> {
+    const query = repository.createQueryBuilder('shift')
+      .where('shift.workforceUserId IN (:...workforceUserIds)', { workforceUserIds })
+      .andWhere('shift.startAt < :windowEnd', { windowEnd: new Date(endAt.getTime() + RULE_WINDOW_MS) })
+      .andWhere('shift.endAt > :windowStart', { windowStart: new Date(startAt.getTime() - RULE_WINDOW_MS) });
+    if (excludeShiftId !== undefined) {
+      query.andWhere('shift.id != :excludeShiftId', { excludeShiftId });
+    }
+    return query.getMany();
+  }
+
+  // Çalışma kurallarından (REST, WEEKLY_LIMIT, CONSECUTIVE_DAYS) biri ihlal ediliyorsa 409 fırlatır; details ihlalleri listeler.
+  private async assertWorkRules(repository: Repository<Shift>, workforceUserId: number, startAt: Date, endAt: Date, shiftId?: number): Promise<void> {
+    const existing = await this.findShiftsForRuleCheck(repository, [workforceUserId], startAt, endAt, shiftId);
+    const violations = checkWorkRules(
+      existing,
+      [{ ...(shiftId !== undefined && { id: shiftId }), startAt, endAt }],
+      DEFAULT_WORK_RULE_OPTIONS,
+    );
+    if (violations.length > 0) {
+      throw new RpcException({
+        statusCode: 409,
+        message: `Çalışma kuralı ihlali: ${violations.map((violation) => `${violation.rule} (${violation.message})`).join(', ')}`,
+        details: violations.map(toViolationDetail),
+      });
     }
   }
 

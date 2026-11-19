@@ -17,8 +17,10 @@ describe('Vardiya yazmalarında ortak kilitleme', () => {
   beforeEach(() => {
     people = builder(['where', 'orderBy', 'setLock', 'getMany']);
     people.getMany.mockResolvedValue([{ id: 3, isActive: true }, { id: 1, isActive: true }]);
-    overlap = builder(['where', 'andWhere', 'getOne']);
+    overlap = builder(['where', 'andWhere', 'getOne', 'getMany']);
     overlap.getOne.mockResolvedValue(null);
+    // Çalışma kuralı kontrolü için okunan çevredeki vardiyalar
+    overlap.getMany.mockResolvedValue([]);
     repository = {
       findOne: jest.fn().mockResolvedValue(current()),
       createQueryBuilder: jest.fn(() => overlap),
@@ -73,6 +75,23 @@ describe('Vardiya yazmalarında ortak kilitleme', () => {
   it('beklerken silinmiş vardiyayı yeniden oluşturmaz', async () => {
     repository.findOne.mockResolvedValue(null);
     await expect(service.updateShift(current() as Shift, { note: 'Yeni' })).rejects.toMatchObject({ error: { statusCode: 404 } });
+    expect(repository.save).not.toHaveBeenCalled();
+  });
+
+  it('kural kontrolü yalnızca ±7 günlük aralığı okur; güncellemede vardiyanın kendisini hariç tutar', async () => {
+    await service.updateShift(current() as Shift, { note: 'Yeni' });
+    const week = 7 * 24 * 60 * 60 * 1000;
+    expect(overlap.andWhere).toHaveBeenCalledWith('shift.startAt < :windowEnd', { windowEnd: new Date(endAt.getTime() + week) });
+    expect(overlap.andWhere).toHaveBeenCalledWith('shift.endAt > :windowStart', { windowStart: new Date(startAt.getTime() - week) });
+    expect(overlap.getMany).toHaveBeenCalled();
+  });
+
+  it('kural ihlalinde 409 ve details döner, kaydetmez', async () => {
+    // Mevcut vardiya yeni vardiya bittikten 2 saat sonra başlıyor → REST: 2 saat
+    overlap.getMany.mockResolvedValue([{ id: 77, startAt: new Date('2099-01-01T18:00:00Z'), endAt: new Date('2099-01-01T20:00:00Z') }]);
+    await expect(service.createShift({ workforceUserId: 3, startAt, endAt })).rejects.toMatchObject({
+      error: { statusCode: 409, details: [expect.objectContaining({ rule: 'REST', value: 2, message: '2 saat dinlenme' })] },
+    });
     expect(repository.save).not.toHaveBeenCalled();
   });
 });

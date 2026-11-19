@@ -27,7 +27,7 @@ export class TeamsController {
   @ApiCreatedResponse({ description: 'Oluşturulan vardiyaların listesi' })
   @ApiBadRequestResponse({ description: 'Geçersiz tarih, süre veya ekip ID değeri' })
   @ApiNotFoundResponse({ description: 'Ekip bulunamadı' })
-  @ApiConflictResponse({ description: 'Pasif ekip, aktif üye yok, geçmiş tarih veya çakışma; details çakışan personelleri içerir' })
+  @ApiConflictResponse({ description: 'Pasif ekip, aktif üye yok, geçmiş tarih, çakışma veya çalışma kuralı ihlali; details ilgili personelleri (ve kural ihlallerini) içerir' })
   createShifts(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateTeamShiftsDto) {
     return this.client.send('createTeamShifts', { teamId: id, ...dto });
   }

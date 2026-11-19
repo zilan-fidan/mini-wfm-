@@ -33,6 +33,8 @@ describe('Takvim vardiya listesi (PostgreSQL entegrasyon)', () => {
     } finally {
       tables.forEach((table, index) => { table.schema = originalSchemas[index]; });
     }
+    // synchronize enum tiplerini şemadan önce kurmaya çalışır; şema önceden açılmalı
+    await db.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
     await db.synchronize();
     service = new ShiftsService(db.getRepository(Shift));
     team = await db.getRepository(Team).save({ name: 'Takvim ekibi' });
@@ -192,8 +194,9 @@ describe('Takvim vardiya listesi (PostgreSQL entegrasyon)', () => {
     });
 
     it('iki farklı vardiya eşzamanlı aynı aralığa taşınamaz', async () => {
-      const first = await service.createShift({ ...singleData(), startAt: new Date('2099-01-01T18:00:00Z'), endAt: new Date('2099-01-01T20:00:00Z') });
-      const second = await service.createShift({ ...singleData(), startAt: new Date('2099-01-01T20:00:00Z'), endAt: new Date('2099-01-01T22:00:00Z') });
+      // Kurulum vardiyaları arasında 11 saatten fazla dinlenme olmalı (WFM-35 REST kuralı)
+      const first = await service.createShift({ ...singleData(), startAt: new Date('2099-01-03T08:00:00Z'), endAt: new Date('2099-01-03T10:00:00Z') });
+      const second = await service.createShift({ ...singleData(), startAt: new Date('2099-01-05T08:00:00Z'), endAt: new Date('2099-01-05T10:00:00Z') });
       assertOneWinner(await Promise.allSettled([
         service.updateShift(first, { startAt: new Date(startAt), endAt: new Date(endAt) }),
         service.updateShift(second, { startAt: new Date(startAt), endAt: new Date(endAt) }),
@@ -219,4 +222,88 @@ describe('Takvim vardiya listesi (PostgreSQL entegrasyon)', () => {
     });
   });
 
+  // WFM-35: çalışma kuralları gerçek veritabanıyla (createShift, updateShift, createTeamShifts)
+  describe('Çalışma kuralları', () => {
+    let ruleTeam: Team;
+    let members: WorkforceUser[];
+    let actorId: number;
+    let serial = 0;
+    // 2099-02-02 pazartesi; saatler yerel (+03:00)
+    const at = (day: string, time: string) => new Date(`2099-02-${day}T${time}:00+03:00`);
+
+    beforeEach(async () => {
+      serial++;
+      ruleTeam = await db.getRepository(Team).save({ name: `Kural ekibi ${serial}` });
+      members = [];
+      for (let i = 0; i < 2; i++) {
+        members.push(await db.getRepository(WorkforceUser).save({ firstname: `Kural${i}`, lastname: 'Test', registrationNumber: `R${serial}-${i}`, teamId: ruleTeam.id }));
+      }
+      actorId = (await db.getRepository(Account).findOneByOrFail({ username: 'planner' })).id;
+    });
+
+    const create = (workforceUserId: number, startAt: Date, endAt: Date) =>
+      service.createShift({ workforceUserId, startAt, endAt, createdById: actorId });
+
+    it('Pzt 08–16 varken Pzt 22–Sal 06 oluşturmak 409 ve "6 saat" döner, kayıt yazılmaz', async () => {
+      await create(members[0].id, at('02', '08:00'), at('02', '16:00'));
+
+      await expect(create(members[0].id, at('02', '22:00'), at('03', '06:00'))).rejects.toMatchObject({
+        error: {
+          statusCode: 409,
+          message: expect.stringContaining('6 saat'),
+          details: [expect.objectContaining({ rule: 'REST', value: 6, message: '6 saat dinlenme' })],
+        },
+      });
+      expect(await db.getRepository(Shift).countBy({ workforceUserId: members[0].id })).toBe(1);
+    });
+
+    it('tam 11 saat dinlenme kabul edilir', async () => {
+      await create(members[0].id, at('02', '08:00'), at('02', '16:00'));
+      await expect(create(members[0].id, at('03', '03:00'), at('03', '11:00'))).resolves.toMatchObject({ workforceUserId: members[0].id });
+    });
+
+    it('güncellemede vardiya kendi eski haliyle karşılaştırılmaz', async () => {
+      const shift = await create(members[0].id, at('02', '08:00'), at('02', '16:00'));
+      // Bir saat ileri alınır: eski hal (08–16) hesaba girseydi "dinlenme" negatif olurdu
+      await expect(service.updateShift(shift, { startAt: at('02', '09:00'), endAt: at('02', '17:00') }))
+        .resolves.toMatchObject({ id: shift.id });
+    });
+
+    it('güncellemede başka vardiyaya 11 saatten yakın taşımak 409 döner', async () => {
+      await create(members[0].id, at('02', '08:00'), at('02', '16:00'));
+      const later = await create(members[0].id, at('04', '08:00'), at('04', '16:00'));
+      await expect(service.updateShift(later, { startAt: at('02', '20:00'), endAt: at('02', '23:00') }))
+        .rejects.toMatchObject({ error: { statusCode: 409, details: [expect.objectContaining({ rule: 'REST', value: 4 })] } });
+    });
+
+    it('toplu vardiyada dinlenmesi yetmeyen üye details içinde listelenir, kimseye yazılmaz', async () => {
+      await create(members[1].id, at('02', '08:00'), at('02', '16:00'));
+      const before = await db.getRepository(Shift).count();
+
+      await expect(service.createTeamShifts({
+        teamId: ruleTeam.id, startAt: at('02', '22:00').toISOString(), endAt: at('03', '06:00').toISOString(),
+      }, actorId)).rejects.toMatchObject({
+        error: {
+          statusCode: 409,
+          details: [{
+            workforceUserId: members[1].id,
+            registrationNumber: members[1].registrationNumber,
+            firstname: members[1].firstname,
+            lastname: members[1].lastname,
+            violations: [expect.objectContaining({ rule: 'REST', message: '6 saat dinlenme' })],
+          }],
+        },
+      });
+      expect(await db.getRepository(Shift).count()).toBe(before);
+    });
+
+    it('haftalık limit: Pzt–Cum 07–18 varken Cmt 07–18 → 66 saat', async () => {
+      for (const day of ['02', '03', '04', '05', '06']) {
+        await create(members[0].id, at(day, '07:00'), at(day, '18:00'));
+      }
+      await expect(create(members[0].id, at('07', '07:00'), at('07', '18:00'))).rejects.toMatchObject({
+        error: { statusCode: 409, details: [expect.objectContaining({ rule: 'WEEKLY_LIMIT', message: '66 saat' })] },
+      });
+    });
+  });
 });
