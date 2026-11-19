@@ -88,7 +88,7 @@ export class WorkOrdersController {
   @ApiOkResponse({ description: 'İş emri güncellendi',})
   @ApiBadRequestResponse({ description: 'Geçersiz veri veya geçmiş bitiş tarihi',})
   @ApiNotFoundResponse({description: 'İş emri bulunamadı',})
-  @ApiConflictResponse({description: 'Tamamlanmış veya iptal edilmiş iş emri güncellenemez',})
+  @ApiConflictResponse({ description: 'Kapanmış iş emri güncellenemez veya version güncel değil' })
   @ApiUnauthorizedResponse({ description: 'Token eksik veya geçersiz',})
   @ApiForbiddenResponse({ description: 'Bu işlem için yetkiniz yok',})
   update(
@@ -97,6 +97,7 @@ export class WorkOrdersController {
   ) {
     return this.client.send('updateWorkOrder', {
       id,
+      version: dto.version,
       data: {
         ...(dto.title !== undefined && { title: dto.title }),
         ...(dto.description !== undefined && {
@@ -115,7 +116,7 @@ export class WorkOrdersController {
 @ApiOperation({ summary: 'İş emrinin durumunu değiştirir',})
 @ApiOkResponse({description: 'İş emrinin durumu başarıyla güncellendi',})
 @ApiBadRequestResponse({description: 'Geçersiz durum, ekip ID veya iptal nedeni',})
-@ApiConflictResponse({description: 'İzin verilmeyen durum geçişi',})
+@ApiConflictResponse({ description: 'İzin verilmeyen durum geçişi veya version güncel değil' })
 @ApiForbiddenResponse({description: 'Bu durum geçişi için yetki yok',})
 changeStatus(
   @Param('id', ParseIntPipe) id: number,
@@ -123,6 +124,7 @@ changeStatus(
 ) {
   return this.client.send('changeWorkOrderStatus', {
     id,
+    version: dto.version,
     status: dto.status,
     teamId: dto.teamId,
     reason: dto.reason,

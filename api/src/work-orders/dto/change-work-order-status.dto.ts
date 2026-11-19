@@ -11,6 +11,13 @@ export enum WorkOrderStatus {
 }
 
 export class ChangeWorkOrderStatusDto {
+  // Optimistic locking: istemcinin son okuduğu sürüm
+  @ApiProperty({ example: 1, description: 'Son okunan version; güncel değilse 409' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  version: number;
+
   @ApiProperty({ enum: WorkOrderStatus, example: WorkOrderStatus.ASSIGNED })
   @IsEnum(WorkOrderStatus)
   status: WorkOrderStatus;

@@ -21,6 +21,7 @@ type CreateWorkOrderPayload = {
 };
 type UpdateWorkOrderPayload = {
   id: number;
+  version: number;
   data: {
     title?: string;
     description?: string | null;
@@ -167,13 +168,20 @@ async findOneWorkOrder(id: number) {
 
 @MessagePattern('updateWorkOrder')
 async updateWorkOrder(payload: UpdateWorkOrderPayload) {
-  const { id, data } = payload;
+    const { id, version, data } = payload;
 
   // 1. ID doğrulaması
   if (!Number.isInteger(id) || id <= 0) {
     throw new RpcException({
       statusCode: HttpStatus.BAD_REQUEST,
       message: 'Geçerli bir iş emri ID değeri girilmelidir',
+    });
+  }
+    //  Sürüm doğrulaması
+  if (!Number.isInteger(version) || version < 1) {
+    throw new RpcException({
+      statusCode: HttpStatus.BAD_REQUEST,
+      message: 'Geçerli bir version değeri gönderilmelidir',
     });
   }
 
@@ -274,26 +282,34 @@ async updateWorkOrder(payload: UpdateWorkOrderPayload) {
   }
 
   // 9. Güncelleme işlemi
-  return this.workOrdersService.updateWorkOrder(
-    workOrder,
-    updateData,
-  );
+    // Güncelleme: sürüm kontrolü UPDATE sorgusunun WHERE koşulunda yapılır
+  return this.workOrdersService.updateWorkOrder(id, version, updateData);
+
 }
   
 @MessagePattern('changeWorkOrderStatus')
 async changeWorkOrderStatus(payload: {
   id: number;
+  version: number;
   status: WorkOrderStatus;
   teamId?: number | null;
   reason?: string | null;
 }) {
-  const { id, status, teamId, reason } = payload;
+   const { id, version, status, teamId, reason } = payload;
+
 
   // 1. ID kontrolü
   if (!Number.isInteger(id) || id <= 0) {
     throw new RpcException({
       statusCode: 400,
       message: 'Geçersiz iş emri ID',
+    });
+  }
+  // Sürüm kontrolü
+  if (!Number.isInteger(version) || version < 1) {
+    throw new RpcException({
+      statusCode: 400,
+      message: 'Geçerli bir version değeri gönderilmelidir',
     });
   }
 
@@ -357,6 +373,7 @@ return this.workOrdersService.changeWorkOrderStatus(
   reason,
   actor.id,
   actor.role,
+  version,
 );
 }
 

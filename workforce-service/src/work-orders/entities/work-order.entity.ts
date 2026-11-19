@@ -1,4 +1,4 @@
-import {Entity,PrimaryGeneratedColumn,Column, ManyToOne,JoinColumn, CreateDateColumn,UpdateDateColumn,Index,} from 'typeorm';
+import {Entity,PrimaryGeneratedColumn,Column, ManyToOne,JoinColumn, CreateDateColumn,UpdateDateColumn,Index, VersionColumn,} from 'typeorm';
 import { Team } from '../../teams/entities/team.entity';
 import { Account } from '../../account/entities/account.entity';
 import { WorkOrderPriority } from '../enums/work-order-priority.enum';
@@ -59,11 +59,13 @@ export class WorkOrder {
   })
   dueAt: Date;
 
-  @Column({
+    // Optimistic locking: her güncellemede TypeORM otomatik olarak 1 artırır
+  @VersionColumn({
     type: 'int',
     default: 1,
   })
   version: number;
+
 
   @Column({
     name: 'created_by_id',

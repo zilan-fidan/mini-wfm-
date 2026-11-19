@@ -41,7 +41,7 @@ import { WorkOrdersModule } from './work-orders/work-orders.module';
         synchronize: false,
 
         namingStrategy: new SnakeNamingStrategy(),
-
+        logging: 'all',
         migrations: [__dirname + '/migrations/*{.ts,.js}'],
 
         migrationsRun: true,

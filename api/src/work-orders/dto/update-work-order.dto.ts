@@ -1,7 +1,17 @@
-import {IsString,IsNotEmpty, MaxLength,IsOptional,IsEnum,IsISO8601,} from 'class-validator';
+import {IsString,IsNotEmpty, MaxLength,IsOptional,IsEnum,IsISO8601,IsInt,Min,} from 'class-validator';
 import { WorkOrderPriority } from '../enums/work-order-priority.enum';
+import { Type } from 'class-transformer';
+import { ApiProperty } from '@nestjs/swagger';
+
 
 export class UpdateWorkOrderDto {
+  // Optimistic locking: istemcinin son okuduğu sürüm
+  @ApiProperty({ example: 1, description: 'Son okunan version; güncel değilse 409' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  version: number;
+
   // İş emri başlığı
   @IsOptional()
   @IsString()

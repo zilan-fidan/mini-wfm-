@@ -54,11 +54,8 @@ describe('WorkOrdersController', () => {
     );
 
     workOrdersService.updateWorkOrder.mockImplementation(
-      async (
-        workOrder: WorkOrder,
-        data: Partial<WorkOrder>,
-      ) => ({
-        ...workOrder,
+      async (_id: number, _version: number, data: Partial<WorkOrder>) => ({
+        ...makeWorkOrder(),
         ...data,
       }),
     );
@@ -87,6 +84,7 @@ describe('WorkOrdersController', () => {
       await expect(
         controller.updateWorkOrder({
           id: 1,
+          version: 1,
           data: { title: 'Yeni başlık' },
         }),
       ).rejects.toMatchObject({
@@ -110,6 +108,7 @@ describe('WorkOrdersController', () => {
       await expect(
         controller.updateWorkOrder({
           id: 1,
+          version: 1,
           data: { title: 'Yeni başlık' },
         }),
       ).rejects.toMatchObject({
@@ -123,6 +122,7 @@ describe('WorkOrdersController', () => {
       await expect(
         controller.updateWorkOrder({
           id: 1,
+          version: 1,
           data: {
             dueAt: '2020-01-01T08:00:00Z',
           },
@@ -137,6 +137,7 @@ describe('WorkOrdersController', () => {
     it('status ve teamId alanlarını yok saymalı', async () => {
       const result = await controller.updateWorkOrder({
         id: 1,
+        version: 1,
         data: {
           title: 'Güncellenmiş trafo kontrolü',
           status: WorkOrderStatus.COMPLETED,
@@ -146,14 +147,9 @@ describe('WorkOrdersController', () => {
 
       expect(
         workOrdersService.updateWorkOrder,
-      ).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: 1,
-        }),
-        {
-          title: 'Güncellenmiş trafo kontrolü',
-        },
-      );
+).toHaveBeenCalledWith(1, 1, {
+        title: 'Güncellenmiş trafo kontrolü',
+      });
 
       expect(result.status).toBe(WorkOrderStatus.OPEN);
       expect(result.teamId).toBeNull();
@@ -162,6 +158,7 @@ describe('WorkOrdersController', () => {
     it('Geçerli iş emrini güncelleyebilmeli', async () => {
       const result = await controller.updateWorkOrder({
         id: 1,
+        version: 1,
         data: {
           title: 'Trafo bakımı',
           priority: WorkOrderPriority.HIGH,
@@ -184,6 +181,7 @@ describe('WorkOrdersController', () => {
       await expect(
         controller.updateWorkOrder({
           id: 99,
+          version: 1,
           data: { title: 'Yeni başlık' },
         }),
       ).rejects.toMatchObject({
@@ -192,6 +190,14 @@ describe('WorkOrdersController', () => {
           message: 'İş emri bulunamadı',
         },
       });
+    });
+
+    it('version yoksa 400 vermeli', async () => {
+      await expect(
+        controller.updateWorkOrder({ id: 1, data: { title: 'X' } } as any),
+      ).rejects.toMatchObject({ error: { statusCode: 400 } });
+
+      expect(workOrdersService.updateWorkOrder).not.toHaveBeenCalled();
     });
   });
 });
