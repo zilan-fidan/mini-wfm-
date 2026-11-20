@@ -14,7 +14,7 @@ import { DEFAULT_WORK_RULE_OPTIONS, MS_PER_DAY, WorkRuleViolation, checkWorkRule
 
 // Kural kontrolü için yeni vardiyanın kaç gün öncesi ve sonrası okunur.
 // Hafta penceresi, 11 saat dinlenme ve 7 günlük seri bu aralığın dışına taşamaz.
-const RULE_WINDOW_MS = 7 * MS_PER_DAY;
+export const RULE_WINDOW_MS = 7 * MS_PER_DAY;
 
 // İhlali TCP/JSON üzerinden taşınabilir, sade bir yapıya çevirir (entity'nin tüm alanları değil).
 export function toViolationDetail(violation: WorkRuleViolation) {

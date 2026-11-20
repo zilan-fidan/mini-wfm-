@@ -1,4 +1,5 @@
 import { CreateTeamShiftsDto } from './dto/create-team-shifts.dto';
+import { CreateRotationPlanDto } from './dto/create-rotation-plan.dto';
 import {Body,Controller,Delete,Get,Inject,Param,ParseIntPipe,Patch,Post,Query,} from '@nestjs/common';
 import { WORKFORCE_SERVICE } from '../constants';
 import { ClientProxy } from '@nestjs/microservices';
@@ -30,6 +31,19 @@ export class TeamsController {
   @ApiConflictResponse({ description: 'Pasif ekip, aktif üye yok, geçmiş tarih, çakışma veya çalışma kuralı ihlali; details ilgili personelleri (ve kural ihlallerini) içerir' })
   createShifts(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateTeamShiftsDto) {
     return this.client.send('createTeamShifts', { teamId: id, ...dto });
+  }
+
+
+  @Roles(Role.ADMIN, Role.PLANNER)
+  @Post(':id/rotation-plan')
+  @ApiOperation({ summary: 'Ekip için otomatik rotasyon planı oluşturur; apply=true ise eksiksiz planı atomik olarak kaydeder' })
+  @ApiParam({ name: 'id', type: Number, example: 1 })
+  @ApiCreatedResponse({ description: 'Plan: atamalar, personel başına toplam saat, doldurulamayan vardiyalar (unfilled) ve adalet farkı (fairnessGapHours)' })
+  @ApiBadRequestResponse({ description: 'Geçersiz tarih, gün sayısı, vardiya saati/süresi, tekrarlı kalıp adı veya ekip ID değeri' })
+  @ApiNotFoundResponse({ description: 'Ekip bulunamadı' })
+  @ApiConflictResponse({ description: 'apply=true iken plan eksik ("Plan tamamlanamadı", details: unfilled), geçmiş tarih, pasif ekip veya aktif üye yok' })
+  createRotationPlan(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateRotationPlanDto) {
+    return this.client.send('createRotationPlan', { teamId: id, ...dto });
   }
 
   @Roles(Role.ADMIN)
