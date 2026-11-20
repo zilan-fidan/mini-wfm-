@@ -1,5 +1,6 @@
 
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -33,6 +34,7 @@ import { Roles, Role } from '../auth/decorators/roles.decorator';
 import { CreateWorkforceUserDto } from './dto/create-workforce-user.dto';
 import { ListWorkforceUsersQueryDto } from './dto/list-workforce-users-query.dto';
 import { UpdateWorkforceUserDto } from './dto/update-workforce-user.dto';
+import { TimesheetQueryDto } from './dto/timesheet-query.dto';
 
 @ApiTags('workforce-users')
 @ApiBearerAuth('access-token')
@@ -87,6 +89,35 @@ export class WorkforceUsersController {
   @ApiNotFoundResponse({ description: 'Personel bulunamadı' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.client.send('findOneWorkforceUser', id);
+  }
+
+  // 3b. AYLIK PUANTAJ - TÜM ROLLER
+  @Roles(Role.ADMIN, Role.PLANNER, Role.VIEWER)
+  @Get(':id/timesheet')
+  @ApiOperation({
+    summary: 'Personelin aylık puantajını hesaplar',
+    description:
+      'Yetkili roller: ADMIN, PLANNER, VIEWER. Saatler bir ondalığa yuvarlanır. ' +
+      'Günlük satırlar: toplam, gece (20.00–06.00), resmî tatil, hafta sonu, fazla mesai. ' +
+      'Haftalık satırlar pazartesi başlar: totalHours/overtimeHours TAM haftaya (ay dışı günler dahil), ' +
+      'monthTotalHours/monthOvertimeHours haftanın istenen ay içindeki bölümüne aittir. ' +
+      'Ay toplamları yalnızca istenen ayda kalan süredir.',
+  })
+  @ApiParam({ name: 'id', type: Number, example: 1 })
+  @ApiOkResponse({ description: 'Aylık puantaj' })
+  @ApiBadRequestResponse({ description: 'Geçersiz id veya ay (YYYY-MM, 2026–2027)' })
+  @ApiNotFoundResponse({ description: 'Personel bulunamadı' })
+  getTimesheet(
+    @Param('id', ParseIntPipe) id: number,
+    @Query() query: TimesheetQueryDto,
+  ) {
+    if (id < 1) {
+      throw new BadRequestException('Geçersiz personel ID değeri');
+    }
+    return this.client.send('getWorkforceUserTimesheet', {
+      workforceUserId: id,
+      month: query.month,
+    });
   }
 
   // 4. PERSONEL GÜNCELLEME - YALNIZCA ADMIN

@@ -438,3 +438,93 @@ Yeni durum eklenirken şu bileşenler birlikte güncellenmelidir:
 | `GET` | `/api/work-orders/:id/history` | Durum geçmişini eskiden yeniye listeler. |
 
 Durum geçmişi sonuçlarında işlemi yapan hesabın kullanıcı adı ile işlem zamanı da bulunur.
+
+## WFM-36 — Personel Bazlı Aylık Puantaj
+
+`GET /api/workforce-users/:id/timesheet?month=2026-11` (ADMIN, PLANNER, VIEWER)
+
+`id` pozitif tamsayı, `month` `YYYY-MM` olmalıdır; resmî tatil takvimi yalnızca 2026 ve 2027 için
+tanımlı olduğundan diğer yıllar 400 döner. Personel yoksa 404.
+
+### Hesaplama kuralları
+
+Bütün aralıklar `[startAt, endAt)`; yerel saat UTC+180 dakika (`DEFAULT_WORK_RULE_OPTIONS.utcOffsetMinutes`).
+
+| Kategori | Kural |
+|---|---|
+| Toplam | Vardiyaların istenen ay içinde kalan süresi |
+| Gece | Yerel 20.00–06.00 |
+| Resmî tatil | `shifts/calc/holidays.ts`; yarım gün tatiller 13.00'te başlar |
+| Hafta sonu | Cumartesi–pazar; tatile denk gelen süre yalnızca tatil sayılır |
+| Fazla mesai | Pazartesi 00.00'da başlayan haftada zaman sırasıyla biriken çalışmanın 45 saati aşan kısmı |
+
+Gece ve fazla mesai diğer kategorilerle örtüşebilir; kategori toplamı toplam süreye eşit olmak zorunda değildir.
+Süreler dakika olarak, yuvarlanmadan hesaplanır; yalnızca yanıtta saate çevrilip bir ondalığa yuvarlanır.
+Her satır (gün, hafta, ay) kendi dakikasından yuvarlanır; yuvarlanmış günlük değerler toplanmaz.
+
+### Yanıt
+
+```json
+{
+  "workforceUserId": 1,
+  "month": "2026-10",
+  "days": [{ "date": "2026-10-28", "totalHours": 8, "nightHours": 0, "holidayHours": 3, "weekendHours": 0, "overtimeHours": 0 }],
+  "weeks": [{ "weekStart": "2026-10-26", "totalHours": 24, "overtimeHours": 0, "monthTotalHours": 18, "monthOvertimeHours": 0 }],
+  "totals": { "totalHours": 18, "nightHours": 8, "holidayHours": 3, "weekendHours": 4, "overtimeHours": 0 }
+}
+```
+
+- `days`: ayın bütün günleri; vardiyasız günler sıfırdır.
+- `weeks`: ayı kapsayan tam haftalar (pazartesi). `totalHours` / `overtimeHours` **tam haftaya** aittir
+  (ay dışındaki günler dahil). `monthTotalHours` / `monthOvertimeHours` aynı haftanın **istenen ay içindeki**
+  bölümüdür. Fazla mesai her zaman tam haftanın birikimine göre belirlenir.
+- `totals`: yalnızca istenen ay içinde kalan süre.
+
+Servis, ayı kapsayan tam haftalarla **kesişen** bütün vardiyaları okur (`startAt < haftalarSonu AND endAt > haftalarBaşı`);
+önceki pazar başlayıp pazartesiye taşan vardiyalar da gelir.
+
+### İki algoritma
+
+| Dosya | Yöntem | Kullanım |
+|---|---|---|
+| `shifts/calc/timesheet-reference.ts` | Dakika dakika referans | Yalnızca test ve performans karşılaştırması |
+| `shifts/calc/timesheet-split.ts` | Aralık bölme (gün, 06.00, 20.00, tatil, ay sınırları ve haftalık 45 saat eşiği) | Serviste |
+
+Kategori mantığı iki dosyada bağımsız yazılmıştır (referans: tarih metni ve `Date` alanları;
+bölme: milisaniye aritmetiği ve tatil aralıkları). Ortak olan yalnızca tipler, tatil verisi ve dönem sınırlarıdır.
+
+**Belirsizliklerde seçilen davranış:**
+
+- **Çakışan vardiyalar:** Proje çakışmayı yazma sırasında engeller (`assertNoOverlap`), ancak doğrudan SQL ile
+  oluşabilir. Puantajda aynı an **bir kez** sayılır (vardiyaların birleşimi).
+- **Dakika altı hassasiyet:** API saniye ve milisaniyeli tarihleri kabul eder. Puantaj bunları yuvarlamaz;
+  süreler kesirli dakika olabilir (ör. 19:59:30–20:00:45 → toplam 1,25, gece 0,75 dakika).
+
+### Testler
+
+```bash
+cd workforce-service
+npm test -- --runInBand src/shifts/calc/timesheet.spec.ts            # örnekler, sınırlar, 200 aylık karşılaştırma
+npm test -- --runInBand src/shifts/timesheet.service.spec.ts
+npm test -- --runInBand src/shifts/timesheet.integration.spec.ts     # PostgreSQL
+cd ../api && npm test -- --runInBand src/workforce-users/timesheet.spec.ts
+```
+
+Karşılaştırma testi sabit seed (`20261119`) ile 200 aylık vardiya listesi üretir (`test/timesheet/timesheet-generator.ts`)
+ve iki algoritmanın günlük, haftalık ve aylık dakika değerlerini yuvarlamadan karşılaştırır (tolerans 1e-6 dakika).
+Entegrasyon testi örnek vardiyaları normal `createShift` yolundan yazar; çalışma kuralları açıktır,
+yalnızca `Date.now` 1 Ekim 2026'ya sabitlenir.
+
+### Performans
+
+`cd workforce-service && pnpm bench:timesheet` — seed `20261119`, 1.000 personel × Ekim 2026
+(26.095 vardiya), 3 ısınma + 10 ölçüm. Veri üretimi ve veritabanı ölçüme dahil değildir.
+
+Ölçüm koşulları: Node v24.21.0, Apple M4 (10 çekirdek), macOS (Darwin 25.6.0), 24 GB RAM, 2026-11-19.
+
+| Algoritma | Medyan | Min | Maks | Personel başına |
+|---|---:|---:|---:|---:|
+| Dakika dakika (referans) | 10.185,6 ms | 10.104,1 ms | 10.479,5 ms | 10,19 ms |
+| Aralık bölme | 32,8 ms | 32,0 ms | 33,2 ms | 0,033 ms |
+
+Aralık bölme medyanda yaklaşık **311 kat** daha hızlıdır.
