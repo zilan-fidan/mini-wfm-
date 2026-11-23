@@ -131,6 +131,24 @@ changeStatus(
   });
 }
 
+@Get(':id/team-suggestions')
+@Roles(Role.ADMIN, Role.PLANNER)
+@ApiOperation({
+  summary: 'OPEN iş emri için en uygun 3 ekibi önerir',
+  description:
+    'Yetkili roller: ADMIN, PLANNER. Değerlendirme aralığı şu an → dueAt. ' +
+    'Puan: kapasite saati × 2 (URGENT ise × 4), açık iş emri × −5, geciken iş emri × −10. ' +
+    'Her öneri ölçüt bazında döküm içerir; kapasitesi 0 olan ekipler excluded listesinde nedeniyle döner.',
+})
+@ApiParam({ name: 'id', type: Number, example: 1 })
+@ApiOkResponse({ description: 'suggestions (en fazla 3, puana göre azalan) ve excluded' })
+@ApiBadRequestResponse({ description: 'Geçersiz iş emri ID değeri' })
+@ApiNotFoundResponse({ description: 'İş emri bulunamadı' })
+@ApiConflictResponse({ description: 'İş emri OPEN durumda değil' })
+suggestTeams(@Param('id', ParseIntPipe) id: number) {
+  return this.client.send('suggestTeamsForWorkOrder', id);
+}
+
 @Get(':id/history')
 @Roles(Role.ADMIN, Role.PLANNER, Role.VIEWER)
 @ApiOperation({ summary: 'İş emrinin durum geçmişini listeler',})
