@@ -1,4 +1,3 @@
-
 import * as Joi from 'joi';
 
 // Doğrulanmış ortam değişkenlerinin tipleri
@@ -7,6 +6,8 @@ export type ApiEnv = {
   PORT: number;
   WORKFORCE_SERVICE_HOST: string;
   WORKFORCE_SERVICE_PORT: number;
+  NOTIFICATION_SERVICE_HOST: string;
+  NOTIFICATION_SERVICE_PORT: number;
   JWT_SECRET: string;
   JWT_EXPIRES_IN: string;
 };
@@ -23,6 +24,15 @@ export const envValidationSchema = Joi.object<ApiEnv>({
     .required(),
 
   WORKFORCE_SERVICE_PORT: Joi.number()
+    .port()
+    .required(),
+
+  // Bildirim okuma: api doğrudan notification-service'e TCP ile bağlanır
+  NOTIFICATION_SERVICE_HOST: Joi.string()
+    .hostname()
+    .required(),
+
+  NOTIFICATION_SERVICE_PORT: Joi.number()
     .port()
     .required(),
 

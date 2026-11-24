@@ -9,6 +9,7 @@ import { Team } from '../teams/entities/team.entity';
 import { CorrelationModule } from '../common/correlation/correlation.module';
 import { WorkOrderStatusHistory } from './entities/work-order-status-history.entity';
 import { WorkforceUser } from '../workforce-users/entities/workforce-user.entity';
+import { EventsModule } from '../events/events.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { WorkforceUser } from '../workforce-users/entities/workforce-user.entity
       WorkforceUser,
     ]),
     CorrelationModule,
+    EventsModule,
   ],
   controllers: [WorkOrdersController, TeamSuggestionsController],
   providers: [WorkOrdersService, TeamSuggestionsService],

@@ -8,15 +8,15 @@ import { CorrelationContextService } from './common/correlation/correlation-cont
 import { createCorrelationDispatchHook } from './common/correlation/correlation-dispatch.hook';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ApiEnv } from './config/env.validation';
-import { WORKFORCE_SERVICE } from './constants';
+import { NOTIFICATION_SERVICE, WORKFORCE_SERVICE } from './constants';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // workforce-service'e giden her mesaja correlation id tek yerden eklenir; controller'lar değişmez
-  app
-    .get<ClientProxy>(WORKFORCE_SERVICE)
-    .setOnDispatchHook(createCorrelationDispatchHook(app.get(CorrelationContextService)));
+  // Servislere giden her mesaja correlation id tek yerden eklenir; controller'lar değişmez
+  const dispatchHook = createCorrelationDispatchHook(app.get(CorrelationContextService));
+  app.get<ClientProxy>(WORKFORCE_SERVICE).setOnDispatchHook(dispatchHook);
+  app.get<ClientProxy>(NOTIFICATION_SERVICE).setOnDispatchHook(dispatchHook);
 
   app.setGlobalPrefix('api');
   app.useGlobalFilters(new AllExceptionsFilter());

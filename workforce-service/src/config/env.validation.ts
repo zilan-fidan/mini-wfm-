@@ -9,6 +9,9 @@ export type WorkforceEnv = {
   DB_USERNAME: string;
   DB_PASSWORD: string;
   DB_DATABASE: string;
+  RABBITMQ_URL: string;
+  RABBITMQ_QUEUE: string;
+  RABBITMQ_PUBLISH_TIMEOUT_MS: number;
 };
 
 export const envValidationSchema = Joi.object<WorkforceEnv>({
@@ -24,6 +27,15 @@ export const envValidationSchema = Joi.object<WorkforceEnv>({
   DB_USERNAME: Joi.string().required(),
   DB_PASSWORD: Joi.string().required(),
   DB_DATABASE: Joi.string().required(),
+
+  // ör. amqp://wfm:wfm@localhost:5672 — RabbitMQ kapalı olsa da servis açılır (B23)
+  RABBITMQ_URL: Joi.string()
+    .uri({ scheme: ['amqp', 'amqps'] })
+    .required(),
+  // notification-service'teki RABBITMQ_QUEUE ile aynı olmalı
+  RABBITMQ_QUEUE: Joi.string().default('notification_events'),
+  // Olay yayını bu süreden uzun sürerse vazgeçilir ve hata loglanır
+  RABBITMQ_PUBLISH_TIMEOUT_MS: Joi.number().integer().min(100).max(60000).default(3000),
 });
 
 export function validateEnv(config: Record<string, unknown>): WorkforceEnv {

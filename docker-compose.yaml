@@ -14,6 +14,31 @@ services:
     volumes:
       - mini_wfm_postgres_data:/var/lib/postgresql/data
 
+  rabbitmq:
+    # "-management" etiketi yönetim arayüzünü içerir: http://localhost:15672 (wfm / wfm)
+    image: rabbitmq:4-management
+    container_name: mini-wfm-rabbitmq
+    # RabbitMQ verisini node adına (hostname'e) göre saklar; sabit olmazsa
+    # container yeniden oluşturulunca kuyruklar ve bekleyen mesajlar görünmez olur
+    hostname: mini-wfm-rabbitmq
+
+    environment:
+      RABBITMQ_DEFAULT_USER: wfm
+      RABBITMQ_DEFAULT_PASS: wfm
+
+    ports:
+      - "5672:5672"   # AMQP: workforce-service ve notification-service bağlanır
+      - "15672:15672" # Yönetim arayüzü
+
+    volumes:
+      - mini_wfm_rabbitmq_data:/var/lib/rabbitmq
+
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   mini_wfm_postgres_data:
-
+  mini_wfm_rabbitmq_data:

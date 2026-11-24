@@ -11,6 +11,12 @@ import { WorkforceUser } from '../workforce-users/entities/workforce-user.entity
 import { FindAllWorkOrdersDto } from './dto/find-all-work-orders.dto';
 import {IS_OVERDUE_SQL,WORK_ORDER_ALIAS,resolveSortDirection,resolveWorkOrderSortColumn,} from './constants/work-order-list';
 import { workOrderNotFound, workOrderVersionConflict } from './constants/work-order-errors';
+import { WorkOrderEventsPublisher } from '../events/work-order-events.publisher';
+import {
+  WORK_ORDER_ASSIGNED,
+  WORK_ORDER_STATUS_CHANGED,
+  WorkOrderEventDraft,
+} from '../events/work-order-events';
 
 
 
@@ -20,6 +26,7 @@ export class WorkOrdersService {
     @InjectRepository(WorkOrder)
     private readonly workOrderRepository: Repository<WorkOrder>,
     private readonly dataSource: DataSource,
+    private readonly workOrderEvents: WorkOrderEventsPublisher,
   ) {}
 
   // 1. Yeni iş emri oluşturma
@@ -200,7 +207,10 @@ async changeWorkOrderStatus(
   expectedVersion: number,
 
 ): Promise<WorkOrder> {
-  return this.dataSource.transaction(async (manager) => {
+  // B22: Olaylar transaction içinde yalnızca hazırlanır, commit'ten SONRA yayınlanır.
+  // Transaction içinde yayınlasaydık rollback olan bir değişikliğin olayı çıkabilirdi.
+  // Callback hata fırlatırsa await de fırlatır ve publish satırına hiç gelinmez.
+  const { workOrder, events } = await this.dataSource.transaction(async (manager) => {
     // 1. İş emrini kilitleyerek getir
     const workOrder = await manager
       .getRepository(WorkOrder)
@@ -273,6 +283,10 @@ async changeWorkOrderStatus(
     }
 
     // 6. OPEN -> ASSIGNED
+    let assignment:
+      | { team: { id: number; name: string }; members: { id: number; firstname: string; lastname: string }[] }
+      | undefined;
+
     if (
       fromStatus === WorkOrderStatus.OPEN &&
       toStatus === WorkOrderStatus.ASSIGNED
@@ -303,16 +317,19 @@ async changeWorkOrderStatus(
         });
       }
 
-      const activeMemberCount = await manager
+      // Aktif üyeler aynı transaction içinde okunur; workOrderAssigned olayı bu listeyi taşır
+      const activeMembers = await manager
         .getRepository(WorkforceUser)
-        .count({
+        .find({
+          select: { id: true, firstname: true, lastname: true },
           where: {
             teamId: assignedTeamId,
             isActive: true,
           },
+          order: { id: 'ASC' },
         });
 
-      if (activeMemberCount === 0) {
+      if (activeMembers.length === 0) {
         throw new RpcException({
           statusCode: 409,
           message: 'Aktif üyesi olmayan ekibe iş emri atanamaz',
@@ -320,6 +337,10 @@ async changeWorkOrderStatus(
       }
 
       workOrder.teamId = assignedTeamId;
+      assignment = {
+        team: { id: team.id, name: team.name },
+        members: activeMembers.map(({ id, firstname, lastname }) => ({ id, firstname, lastname })),
+      };
     }
 
     // 7. ASSIGNED -> OPEN: atamayı geri al
@@ -359,9 +380,52 @@ async changeWorkOrderStatus(
     await manager.save(WorkOrderStatusHistory, history);
 
         // Bellekteki nesnede hâlâ eski sürüm var; yanıt güncel version değerini içermeli
-    return manager.findOneByOrFail(WorkOrder, { id: workOrderId });
+    const updated = await manager.findOneByOrFail(WorkOrder, { id: workOrderId });
 
+    // 10. Olayları hazırla (henüz yayınlama)
+    const occurredAt = new Date().toISOString();
+    const snapshot = {
+      id: updated.id,
+      code: updated.code,
+      title: updated.title,
+      version: updated.version,
+    };
+
+    const drafts: WorkOrderEventDraft[] = [
+      {
+        eventType: WORK_ORDER_STATUS_CHANGED,
+        occurredAt,
+        workOrder: snapshot,
+        fromStatus,
+        toStatus,
+        teamId: workOrder.teamId,
+        reason: normalizedReason,
+        changedById,
+      },
+    ];
+
+    if (toStatus === WorkOrderStatus.ASSIGNED && assignment) {
+      drafts.push({
+        eventType: WORK_ORDER_ASSIGNED,
+        occurredAt,
+        workOrder: {
+          ...snapshot,
+          priority: updated.priority,
+          dueAt: new Date(updated.dueAt).toISOString(),
+        },
+        team: assignment.team,
+        members: assignment.members,
+        assignedById: changedById,
+      });
+    }
+
+    return { workOrder: updated, events: drafts };
   });
+
+  // Commit tamamlandı. Yayın beklenmez ve hata fırlatmaz: RabbitMQ kapalıysa da yanıt döner (B23)
+  this.workOrderEvents.publish(events);
+
+  return workOrder;
 }
 
 async findWorkOrderHistory(workOrderId: number) {

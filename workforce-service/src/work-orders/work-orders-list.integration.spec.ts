@@ -5,6 +5,7 @@ import { WorkOrder } from './entities/work-order.entity';
 import { WorkOrderPriority } from './enums/work-order-priority.enum';
 import { WorkOrderStatus } from './enums/work-order-status.enum';
 import { WorkOrdersService } from './work-orders.service';
+import { WorkOrderEventsPublisher } from '../events/work-order-events.publisher';
 import { Team } from '../teams/entities/team.entity';
 import { WorkforceUser } from '../workforce-users/entities/workforce-user.entity';
 import { Account } from '../account/entities/account.entity';
@@ -38,7 +39,11 @@ describe('İş emri listesi (PostgreSQL entegrasyon)', () => {
     // synchronize enum tiplerini şemadan önce kurmaya çalışır; şema önceden açılmalı
     await db.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
     await db.synchronize();
-    service = new WorkOrdersService(db.getRepository(WorkOrder), db);
+    service = new WorkOrdersService(
+      db.getRepository(WorkOrder),
+      db,
+      { publish: jest.fn() } as unknown as WorkOrderEventsPublisher,
+    );
 
     teamA = await db.getRepository(Team).save({ name: 'Saha A' });
     teamB = await db.getRepository(Team).save({ name: 'Saha B' });

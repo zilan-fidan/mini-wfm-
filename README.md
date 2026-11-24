@@ -1,14 +1,15 @@
 # Mini WFM
 
-Mini WFM, ekiplerin ve personellerin yönetildiği başlangıç seviyesinde bir Workforce Management projesidir. Tek bir Git reposunda üç uygulama bulunur:
+Mini WFM, ekiplerin ve personellerin yönetildiği başlangıç seviyesinde bir Workforce Management projesidir. Tek bir Git reposunda dört uygulama bulunur:
 
 | Uygulama | Teknoloji | Görevi |
 |---|---|---|
 | `web` | React 19, Vite, Ant Design 5, TanStack Query | Tarayıcı arayüzü |
 | `api` | NestJS (HTTP) | Dış dünyaya açık REST API, doğrulama, Swagger |
-| `workforce-service` | NestJS (TCP microservice), TypeORM | İş kuralları ve veritabanı |
+| `workforce-service` | NestJS (TCP microservice), TypeORM | İş kuralları ve veritabanı; iş emri olaylarını RabbitMQ'ya yayınlar |
+| `notification-service` | NestJS (RabbitMQ + TCP microservice), TypeORM | Olaylardan bildirim üretir ve bildirimleri listeler |
 
-Veritabanı olarak Docker içinde PostgreSQL kullanılır.
+Docker içinde PostgreSQL ve RabbitMQ kullanılır.
 
 ## Mimari
 
@@ -16,8 +17,16 @@ Veritabanı olarak Docker içinde PostgreSQL kullanılır.
 Tarayıcı (5173)
    │  /api/* istekleri Vite proxy ile 3000'e gider
    ▼
-  api (HTTP 3000) ── TCP (4001) ──►  workforce-service ──►  PostgreSQL (5433)
-  doğrulama, Swagger                 iş kuralları, TypeORM     Docker container
+  api (HTTP 3000) ── TCP (4001) ──►  workforce-service ──────────►  PostgreSQL (5433)
+  doğrulama, Swagger │               iş kuralları, TypeORM   │         workforce şeması
+                     │                       │ emit          │         notification şeması
+                     │                       ▼               │
+                     │               RabbitMQ (5672)         │
+                     │               kuyruk: notification_events
+                     │                       │ consume (manuel ack)
+                     │                       ▼               │
+                     └── TCP (4002) ──► notification-service ┘
+                         (bildirim okuma)
 ```
 
 - **web** API'ye doğrudan değil `/api` önekiyle istek atar; Vite geliştirme sunucusu bu istekleri `http://localhost:3000` adresine iletir.
@@ -58,6 +67,7 @@ docker ps   # "mini-wfm-postgres" container'ı listelenmeli
 ```bash
 cp api/.env.example api/.env
 cp workforce-service/.env.example workforce-service/.env
+cp notification-service/.env.example notification-service/.env
 ```
 
 `web` için `.env` dosyası gerekmez. Değişkenlerin anlamı için [Ayarlar](#ayarlar) bölümüne bakın.
@@ -68,17 +78,22 @@ Her uygulamanın kendi `package.json` dosyası vardır; üçünde ayrı ayrı ku
 
 ```bash
 cd workforce-service && pnpm install && cd ..
+cd notification-service && pnpm install && cd ..
 cd api && pnpm install && cd ..
 cd web && pnpm install && cd ..
 ```
 
 ## Çalıştırma
 
-**Sıra önemlidir:** veritabanı → `workforce-service` → `api` → `web`. Her biri için ayrı bir terminal açın.
+**Sıra önemlidir:** `docker compose up -d` (PostgreSQL + RabbitMQ) → `workforce-service` → `notification-service` → `api` → `web`. Her biri için ayrı bir terminal açın.
 
 ```bash
 # Terminal 1: iş kuralları servisi (açılışta migration'ları çalıştırır)
 cd workforce-service
+pnpm start:dev
+
+# Terminal 1b: bildirim servisi (açılışta kendi migration'larını çalıştırır; RabbitMQ açık olmalı)
+cd notification-service
 pnpm start:dev
 
 # Terminal 2: HTTP API
@@ -105,6 +120,9 @@ Her şeyin ayakta olduğunu kontrol etmek için:
 | `5173` | web | HTTP | `http://localhost:5173` |
 | `3000` | api | HTTP | API: `http://localhost:3000/api` · Swagger: `http://localhost:3000/docs` |
 | `4001` | workforce-service | TCP | Tarayıcıdan açılmaz; sadece `api` bağlanır |
+| `4002` | notification-service | TCP | Bildirim okuma; sadece `api` bağlanır. HTTP portu yoktur |
+| `5672` | RabbitMQ | AMQP | workforce-service yayınlar, notification-service tüketir |
+| `15672` | RabbitMQ yönetim arayüzü | HTTP | `http://localhost:15672` · kullanıcı/parola `wfm` / `wfm` |
 | `5433` | PostgreSQL | TCP | Container içinde `5432`, bilgisayarda `5433` |
 
 PostgreSQL bağlantı bilgileri (DBeaver vb. için):
@@ -132,6 +150,8 @@ Error: Config validation error:
 | `PORT` | hayır | port numarası | `3000` | api'nin HTTP portu |
 | `WORKFORCE_SERVICE_HOST` | **evet** | host adı | — | workforce-service adresi |
 | `WORKFORCE_SERVICE_PORT` | **evet** | port numarası | — | workforce-service TCP portu |
+| `NOTIFICATION_SERVICE_HOST` | **evet** | host adı | — | notification-service adresi |
+| `NOTIFICATION_SERVICE_PORT` | **evet** | port numarası | — | notification-service TCP portu |
 
 **workforce-service** (`workforce-service/.env`)
 
@@ -144,8 +164,23 @@ Error: Config validation error:
 | `DB_USERNAME` | **evet** | metin | — | |
 | `DB_PASSWORD` | **evet** | metin | — | |
 | `DB_DATABASE` | **evet** | metin | — | |
+| `RABBITMQ_URL` | **evet** | `amqp://` / `amqps://` adresi | — | ör. `amqp://wfm:wfm@localhost:5672` |
+| `RABBITMQ_QUEUE` | hayır | metin | `notification_events` | notification-service ile aynı olmalı |
+| `RABBITMQ_PUBLISH_TIMEOUT_MS` | hayır | 100–60000 | `3000` | Olay yayını bu süreyi aşarsa vazgeçilir ve hata loglanır |
 
-Yeni bir ayar eklerken üç yeri birlikte güncelleyin: şema (`env.validation.ts`), tip (`ApiEnv` / `WorkforceEnv`) ve `.env.example`.
+**notification-service** (`notification-service/.env`)
+
+| Değişken | Zorunlu | Tip | Varsayılan | Açıklama |
+|---|---|---|---|---|
+| `NODE_ENV` | hayır | `development` / `production` / `test` | `development` | Çalışma ortamı |
+| `PORT` | hayır | port numarası | `4002` | TCP portu; api'deki `NOTIFICATION_SERVICE_PORT` ile aynı olmalı |
+| `DB_HOST`, `DB_USERNAME`, `DB_PASSWORD`, `DB_DATABASE` | **evet** | metin | — | workforce-service ile aynı veritabanı, ayrı `notification` şeması |
+| `DB_PORT` | hayır | port numarası | `5432` | Docker ile `5433` |
+| `RABBITMQ_URL` | **evet** | `amqp://` / `amqps://` adresi | — | |
+| `RABBITMQ_QUEUE` | hayır | metin | `notification_events` | workforce-service ile aynı olmalı |
+| `RABBITMQ_PREFETCH` | hayır | 1–1000 | `10` | Ack'lenmemiş en fazla kaç mesaj aynı anda bu servise verilir |
+
+Yeni bir ayar eklerken üç yeri birlikte güncelleyin: şema (`env.validation.ts`), tip (`ApiEnv` / `WorkforceEnv` / `NotificationEnv`) ve `.env.example`.
 
 ## Testler
 
@@ -236,7 +271,7 @@ docker compose logs -f postgres  # logları izler
 
 ```text
 mini-wfm/
-├── docker-compose.yaml        # PostgreSQL
+├── docker-compose.yaml        # PostgreSQL + RabbitMQ
 ├── web/
 │   └── src/
 │       ├── api/               # HTTP istekleri (axios)
@@ -249,11 +284,17 @@ mini-wfm/
 │       ├── workforce-users/   # /api/workforce-users uç noktaları ve DTO'lar
 │       ├── health/            # /api/health
 │       └── common/filters/    # servis hatalarını HTTP cevabına çeviren filtre
-└── workforce-service/
+├── workforce-service/
+│   └── src/
+│       ├── teams/             # ekip ve üyelik iş kuralları
+│       ├── workforce-users/   # personel iş kuralları
+│       ├── events/            # RabbitMQ olay sözleşmesi ve yayıncı
+│       └── migrations/
+└── notification-service/
     └── src/
-        ├── teams/             # ekip ve üyelik iş kuralları
-        ├── workforce-users/   # personel iş kuralları
-        └── migrations/
+        ├── common/events/     # olay sözleşmesi (workforce-service ile aynı)
+        ├── notifications/     # olay tüketicisi (manuel ack), TCP okuma, bildirim kaydı
+        └── migrations/        # notification şeması
 ```
 
 ## Sık karşılaşılan hatalar
@@ -528,3 +569,131 @@ yalnızca `Date.now` 1 Ekim 2026'ya sabitlenir.
 | Aralık bölme | 32,8 ms | 32,0 ms | 33,2 ms | 0,033 ms |
 
 Aralık bölme medyanda yaklaşık **311 kat** daha hızlıdır.
+
+## WFM-39 — Bildirimler: RabbitMQ ile asenkron haberleşme
+
+workforce-service iş emri durumu değişince olay yayınlar ve cevabını beklemez. notification-service
+olayı kuyruktan alır ve bildirim yazar. İki servis birbirinin ayakta olmasına bağlı değildir.
+
+### Olaylar
+
+Kuyruk: `notification_events` (durable). Mesajlar persistent gönderilir; AMQP `message_id` = `eventId`,
+`correlation_id` = isteğin correlation id'si. Sözleşme iki yerde aynı tutulur:
+`workforce-service/src/events/work-order-events.ts` ve `notification-service/src/common/events/work-order-events.ts`.
+
+| Olay | Ne zaman | Gövde |
+|---|---|---|
+| `workOrderStatusChanged` | Her durum değişikliğinde | `workOrder { id, code, title, version }`, `fromStatus`, `toStatus`, `teamId`, `reason`, `changedById` |
+| `workOrderAssigned` | Ayrıca `OPEN → ASSIGNED` geçişinde | `workOrder { …, priority, dueAt }`, `team { id, name }`, `members [{ id, firstname, lastname }]`, `assignedById` |
+
+Her olayda ayrıca `eventId` (UUID, her olay için ayrı), `eventVersion`, `occurredAt` ve `correlationId` bulunur (P8).
+`members` atama ile **aynı transaction içinde** okunan aktif üyelerdir; notification-service workforce-service'e geri sormaz.
+
+### Yayın: transaction'dan sonra (B22)
+
+`WorkOrdersService.changeWorkOrderStatus` olayları transaction içinde yalnızca hazırlar, commit'ten sonra
+`WorkOrderEventsPublisher.publish` ile yayınlar. Transaction hata verirse (`409`, FK hatası vb.) olay çıkmaz.
+Önce yayınlayıp sonra commit etseydik rollback olan bir atama için bildirim gidebilirdi.
+
+### RabbitMQ kapalıyken (B23)
+
+`publish` beklenmez ve hata fırlatmaz. RabbitMQ'ya ulaşılamıyorsa iş emri işlemi yine `200` döner,
+workforce-service loguna şu yazılır:
+
+```text
+ERROR [WorkOrderEventsPublisher] workOrderAssigned eventId=… correlationId=… workOrderId=7 yayınlanamadı, olay kayboldu (RabbitMQ'ya ulaşılamıyor): connect ECONNREFUSED 127.0.0.1:5672
+```
+
+RabbitMQ'ya bağlantı ilk olayda kurulur; servis RabbitMQ kapalıyken de açılır. RabbitMQ geri gelince
+sonraki olaylar kendiliğinden yayınlanır. Bağlantı asılı kalırsa `RABBITMQ_PUBLISH_TIMEOUT_MS` sonunda vazgeçilir.
+
+**Bedeli:** RabbitMQ kapalıyken yayınlanan olaylar **kaybolur**; o atamaların bildirimleri hiç oluşmaz ve
+kendiliğinden düzelmez. Kullanılabilirliği (iş emri her zaman atanabilir) tutarlılığa (her atamanın
+bildirimi olur) tercih ettik. Kaybı önlemenin yolu **transactional outbox**: olay iş emriyle aynı transaction
+içinde bir tabloya yazılır, ayrı bir işlem bu tabloyu RabbitMQ'ya taşır. Bu görevde uygulanmadı.
+
+### Tüketim: manuel ack ve tekrar gelen olay (P8)
+
+notification-service `noAck: false` ile dinler. Mesaj yalnızca bildirim kaydı başarıyla yazıldıktan sonra
+ack'lenir (`notifications/manual-ack.ts`):
+
+| Durum | Davranış |
+|---|---|
+| Kayıt yazıldı (ya da olay zaten işlenmişti) | `ack` → kuyruktan silinir |
+| Veritabanı hatası vb. | 1 sn bekle, `nack(requeue=true)` → kuyruğa döner, yeniden denenir |
+| Geçersiz olay (eksik `eventId`, bozuk gövde) | `nack(requeue=false)` → atılır, loglanır |
+| Servis ack'ten önce çöktü | RabbitMQ mesajı kendisi kuyruğa geri koyar |
+
+RabbitMQ "en az bir kez" teslim eder; aynı olay iki kez gelebilir. `notification` tablosunda
+`(event_id, workforce_user_id)` tekil kısıtı vardır ve kayıt `INSERT … ON CONFLICT DO NOTHING` ile yazılır.
+İkinci teslimatta hiçbir satır eklenmez, mesaj yine ack'lenir. Kontrolü veritabanı yaptığı için iki tüketici
+aynı olayı aynı anda işlese de bildirim bir kez oluşur.
+
+> `eventId` tablo genelinde değil **personel başına** tekildir: bir `workOrderAssigned` olayı ekibin her aktif
+> üyesi için ayrı satır üretir, bu satırların hepsi aynı `eventId`'yi taşır.
+
+`workOrderStatusChanged` şimdilik bildirim üretmez; loglanır ve ack'lenir.
+
+### notification-service
+
+- HTTP portu açmaz. Bir Nest uygulamasına iki microservice bağlanır: RabbitMQ (olaylar) ve TCP `4002`
+  (okuma). Handler'lar transport ile sınırlıdır (`@EventPattern(…, Transport.RMQ)`,
+  `@MessagePattern(…, Transport.TCP)`); kuyruktan okuma isteği, TCP'den olay gönderilemez.
+- Kendi `notification` şeması ve migration'ı vardır. Migration kayıtları `notification_migrations`
+  tablosunda tutulur (workforce-service'in `migrations` tablosuyla karışmasın diye).
+- Loglarda her olay için `eventId` ve `correlationId` görünür:
+
+```text
+LOG [NotificationEventsController] workOrderAssigned eventId=… correlationId=adim1-kuyruk workOrderId=3 teamId=30 members=2 created=2 duplicate=0
+```
+
+### Okuma
+
+`GET /api/notifications?workforceUserId=1` (ADMIN, PLANNER, VIEWER). api bu isteği workforce-service'e değil,
+notification-service'e TCP ile gönderir. En yeni 100 bildirim, yeniden eskiye döner. `workforceUserId`
+pozitif tamsayı değilse `400`, notification-service kapalıysa `503`.
+
+### Nasıl denenir?
+
+1. `docker compose up -d`, workforce-service ve api çalışıyor; **notification-service durdurulmuş**.
+2. Aktif üyesi olan bir ekibe bir iş emri atayın (`PATCH /api/work-orders/:id/status`, `status: ASSIGNED`).
+3. `http://localhost:15672` → **Queues** → `notification_events`: `Ready` sütununda 2 mesaj bekler
+   (`workOrderStatusChanged` + `workOrderAssigned`).
+4. notification-service'i başlatın: mesajlar işlenir, kuyruk boşalır, loglarda `created=<üye sayısı>` görünür.
+   `GET /api/notifications?workforceUserId=<üye id>` bildirimi döner.
+5. `docker compose stop rabbitmq` ve yeni bir atama yapın: atama `200` döner, workforce-service logunda
+   `yayınlanamadı, olay kayboldu` hatası görünür. `docker compose start rabbitmq` ile geri açın.
+
+### Testler
+
+```bash
+cd notification-service && pnpm test     # idempotency (PostgreSQL), manuel ack, TCP okuma, ayarlar
+cd workforce-service && npm test -- --runInBand src/events src/work-orders/work-orders.service.spec.ts src/work-orders/work-orders-version.integration.spec.ts
+cd api && npm test -- --runInBand src/notifications
+```
+
+| Kabul kriteri | Test |
+|---|---|
+| Aynı olay iki kez işlense de bildirim bir kez oluşur | `notifications.integration.spec.ts` (art arda, eşzamanlı ve iki teslimat + ack) |
+| Bildirim yazılmadan mesaj silinmez | `notification-events.controller.spec.ts` |
+| Geri alınan işlem için olay yayınlanmaz | `work-orders-version.integration.spec.ts` (gerçek FK hatası → rollback), `work-orders.service.spec.ts` |
+| RabbitMQ kapalıyken atama çalışır | `work-order-events.publisher.spec.ts` |
+| Correlation id olayla taşınır | `work-order-events.publisher.spec.ts`, `notification-events.controller.spec.ts` |
+
+PostgreSQL testi varsayılan olarak `127.0.0.1:5433/mini_wfm`'e bağlanır, kendi şemasını oluşturup siler;
+farklı veritabanı için `NOTIFICATIONS_TEST_DATABASE_URL`.
+
+### Mentora anlatım: `send` ile `emit` farkı
+
+| | `send` (`@MessagePattern`) | `emit` (`@EventPattern`) |
+|---|---|---|
+| Model | İstek–cevap | Olay (ateşle ve unut) |
+| Gönderen | Cevabı bekler; karşı taraf kapalıysa hata/zaman aşımı alır | Cevap beklemez; yalnızca mesajın broker'a teslimini bilir |
+| Karşı taraf | Tek bir alıcı, cevap üretmek zorunda | Sıfır, bir ya da çok tüketici olabilir; cevap üretmez |
+| Bağlılık | Zamansal bağlılık: iki servis aynı anda ayakta olmalı | Kuyruk araya girer; tüketici kapalıysa mesaj bekler |
+| Bu projede | api → workforce-service / notification-service (TCP) | workforce-service → RabbitMQ → notification-service |
+
+Bildirim için `send` kullansaydık iş emri ataması notification-service'in cevabını bekler, o servis kapalıyken
+atama da başarısız olurdu. `emit` ile atama bildirimden bağımsızdır; bedeli, bildirimin "hemen" değil
+"sonunda" oluşması (eventual consistency) ve yukarıda anlatılan B23 kaybıdır.
+

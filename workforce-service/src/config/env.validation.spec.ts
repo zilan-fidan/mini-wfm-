@@ -6,6 +6,7 @@ const validEnv = {
   DB_USERNAME: 'postgres',
   DB_PASSWORD: 'postgres',
   DB_DATABASE: 'mini_wfm',
+  RABBITMQ_URL: 'amqp://wfm:wfm@localhost:5672',
 };
 
 describe('workforce-service validateEnv', () => {
@@ -15,6 +16,15 @@ describe('workforce-service validateEnv', () => {
     expect(env.DB_PORT).toBe(5433);
     expect(env.PORT).toBe(4001);
     expect(env.NODE_ENV).toBe('development');
+    expect(env.RABBITMQ_QUEUE).toBe('notification_events');
+    expect(env.RABBITMQ_PUBLISH_TIMEOUT_MS).toBe(3000);
+  });
+
+  it('RABBITMQ_URL eksikse veya amqp adresi değilse hata verir', () => {
+    const { RABBITMQ_URL: _removed, ...rest } = validEnv;
+
+    expect(() => validateEnv(rest)).toThrow('"RABBITMQ_URL" is required');
+    expect(() => validateEnv({ ...validEnv, RABBITMQ_URL: 'localhost' })).toThrow('"RABBITMQ_URL" must be a valid uri');
   });
 
   it('zorunlu bir değer eksikse hata verir ve değişkenin adını yazar', () => {

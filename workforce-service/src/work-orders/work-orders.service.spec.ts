@@ -5,6 +5,7 @@ import { WorkOrdersService } from './work-orders.service';
 import { WorkOrder } from './entities/work-order.entity';
 import { WorkOrderStatus } from './enums/work-order-status.enum';
 import { WorkOrderStatusHistory } from './entities/work-order-status-history.entity';
+import { WorkOrderEventsPublisher } from '../events/work-order-events.publisher';
 
 
 describe('WorkOrdersService - Durum Geçişleri', () => {
@@ -37,6 +38,9 @@ describe('WorkOrdersService - Durum Geçişleri', () => {
     save: jest.fn(),
     create: jest.fn(),
   };
+
+  const mockPublisher = { publish: jest.fn() };
+
 
   const mockDataSource = {
     transaction: jest.fn(
@@ -72,6 +76,7 @@ describe('WorkOrdersService - Durum Geçişleri', () => {
             provide: DataSource,
             useValue: mockDataSource,
           },
+          { provide: WorkOrderEventsPublisher, useValue: mockPublisher },
         ],
       }).compile();
 
@@ -198,6 +203,7 @@ describe('WorkOrdersService - İzinli Durum Geçişleri', () => {
     createQueryBuilder: jest.fn(),
     findOne: jest.fn(),
     count: jest.fn(),
+    find: jest.fn(),
   };
 
   const mockUpdateBuilder = {
@@ -216,6 +222,9 @@ describe('WorkOrdersService - İzinli Durum Geçişleri', () => {
     save: jest.fn(),
   };
 
+  const mockPublisher = { publish: jest.fn() };
+
+
   const mockDataSource = {
     transaction: jest.fn(),
   };
@@ -233,11 +242,13 @@ describe('WorkOrdersService - İzinli Durum Geçişleri', () => {
     // Ekip aktif
     mockRepository.findOne.mockResolvedValue({
       id: 3,
+      name: 'Saha',
       isActive: true,
     });
 
     // Ekipte bir aktif personel var
     mockRepository.count.mockResolvedValue(1);
+    mockRepository.find.mockResolvedValue([{ id: 5, firstname: 'Ada', lastname: 'Yılmaz' }]);
 
     mockManager.getRepository.mockReturnValue(mockRepository);
 
@@ -272,6 +283,7 @@ describe('WorkOrdersService - İzinli Durum Geçişleri', () => {
           provide: DataSource,
           useValue: mockDataSource,
         },
+        { provide: WorkOrderEventsPublisher, useValue: mockPublisher },
       ],
     }).compile();
 
@@ -354,6 +366,7 @@ describe('WorkOrdersService - İzinli Durum Geçişleri', () => {
         teamId:
           from === WorkOrderStatus.OPEN ? null : 3,
         version: 1,
+        dueAt: new Date('2026-12-01T00:00:00Z'),
       } as WorkOrder;
 
       mockQueryBuilder.getOne.mockResolvedValue(workOrder);
@@ -408,6 +421,45 @@ describe('WorkOrdersService - İzinli Durum Geçişleri', () => {
       ).toHaveBeenCalledTimes(1);
     },
   );
+  it('olaylar transaction bittikten sonra yayınlanır; ASSIGNED için iki olay', async () => {
+    const workOrder = { id: 1, code: 'IE-0001', title: 'Arıza', status: WorkOrderStatus.OPEN, teamId: null, version: 1 } as WorkOrder;
+    mockQueryBuilder.getOne.mockResolvedValue(workOrder);
+    mockManager.findOneByOrFail.mockImplementation(async () => ({
+      ...workOrder, status: WorkOrderStatus.ASSIGNED, teamId: 3, version: 2,
+      priority: 'HIGH', dueAt: new Date('2026-12-01T00:00:00Z'),
+    }));
+    let transactionFinished = false;
+    mockDataSource.transaction.mockImplementation(async (callback) => {
+      const result = await callback(mockManager);
+      expect(mockPublisher.publish).not.toHaveBeenCalled();
+      transactionFinished = true;
+      return result;
+    });
+    mockPublisher.publish.mockImplementation(() => expect(transactionFinished).toBe(true));
+
+    await service.changeWorkOrderStatus(1, WorkOrderStatus.ASSIGNED, 3, null, 10, 'PLANNER', 1);
+
+    expect(mockPublisher.publish).toHaveBeenCalledTimes(1);
+    const drafts = mockPublisher.publish.mock.calls[0][0];
+    expect(drafts.map((d: { eventType: string }) => d.eventType)).toEqual(['workOrderStatusChanged', 'workOrderAssigned']);
+    expect(drafts[1]).toMatchObject({
+      workOrder: { id: 1, code: 'IE-0001', version: 2, priority: 'HIGH', dueAt: '2026-12-01T00:00:00.000Z' },
+      team: { id: 3, name: 'Saha' },
+      members: [{ id: 5, firstname: 'Ada', lastname: 'Yılmaz' }],
+      assignedById: 10,
+    });
+  });
+
+  it('transaction geri alınırsa olay yayınlanmaz', async () => {
+    mockQueryBuilder.getOne.mockResolvedValue({ id: 1, status: WorkOrderStatus.OPEN, teamId: null, version: 1 });
+    mockManager.save.mockRejectedValue(new Error('history insert failed'));
+
+    await expect(
+      service.changeWorkOrderStatus(1, WorkOrderStatus.ASSIGNED, 3, null, 10, 'PLANNER', 1),
+    ).rejects.toThrow('history insert failed');
+
+    expect(mockPublisher.publish).not.toHaveBeenCalled();
+  });
 });
 
 });

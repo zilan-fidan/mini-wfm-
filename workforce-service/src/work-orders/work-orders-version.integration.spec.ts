@@ -6,6 +6,8 @@ import { WorkOrderStatusHistory } from './entities/work-order-status-history.ent
 import { WorkOrderPriority } from './enums/work-order-priority.enum';
 import { WorkOrderStatus } from './enums/work-order-status.enum';
 import { WorkOrdersService } from './work-orders.service';
+import { WorkOrderEventsPublisher } from '../events/work-order-events.publisher';
+import { WORK_ORDER_ASSIGNED, WORK_ORDER_STATUS_CHANGED, WorkOrderEventDraft } from '../events/work-order-events';
 import { WORK_ORDER_VERSION_CONFLICT_MESSAGE } from './constants/work-order-errors';
 import { Team } from '../teams/entities/team.entity';
 import { WorkforceUser } from '../workforce-users/entities/workforce-user.entity';
@@ -26,6 +28,7 @@ describe('İş emri optimistic locking (PostgreSQL entegrasyon)', () => {
   let db: DataSource;
   let service: WorkOrdersService;
   let accountId: number;
+  const publish = jest.fn<void, [WorkOrderEventDraft[]]>();
   const schema = `work_order_version_test_${process.pid}_${Date.now()}`;
   const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
   let seq = 0;
@@ -62,11 +65,17 @@ describe('İş emri optimistic locking (PostgreSQL entegrasyon)', () => {
     // synchronize enum tiplerini şemadan önce kurmaya çalışır; şema önceden açılmalı
     await db.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
     await db.synchronize();
-    service = new WorkOrdersService(db.getRepository(WorkOrder), db);
+    service = new WorkOrdersService(
+      db.getRepository(WorkOrder),
+      db,
+      { publish } as unknown as WorkOrderEventsPublisher,
+    );
 
     const account = await db.getRepository(Account).save({ username: 'planner', passwordHash: 'test', role: AccountRole.ADMIN });
     accountId = account.id;
   });
+
+  beforeEach(() => publish.mockReset());
 
   afterAll(async () => {
     if (db?.isInitialized) {
@@ -152,5 +161,82 @@ describe('İş emri optimistic locking (PostgreSQL entegrasyon)', () => {
     expect(current.status).toBe(WorkOrderStatus.OPEN);
     expect(current.version).toBe(2);
     expect(await db.getRepository(WorkOrderStatusHistory).countBy({ workOrderId: wo.id })).toBe(0);
+  });
+
+  describe('olay yayını (B22)', () => {
+    let teamId: number;
+    let activeIds: number[];
+
+    beforeAll(async () => {
+      const team = await db.getRepository(Team).save({ name: 'Olay Ekibi' });
+      teamId = team.id;
+      const users = await db.getRepository(WorkforceUser).save([
+        { firstname: 'Ada', lastname: 'Yılmaz', registrationNumber: 'EV-001', teamId, isActive: true },
+        { firstname: 'Ali', lastname: 'Demir', registrationNumber: 'EV-002', teamId, isActive: true },
+        { firstname: 'Pasif', lastname: 'Üye', registrationNumber: 'EV-003', teamId, isActive: false },
+      ]);
+      activeIds = users.filter((u) => u.isActive).map((u) => u.id);
+    });
+
+    it('ASSIGNED geçişi commit edildikten sonra iki olay yayınlanır; üye listesi yalnızca aktif üyeler', async () => {
+      const wo = await createWorkOrder();
+      let statusSeenByPublisher: Promise<WorkOrderStatus> | undefined;
+      // publish çağrıldığı anda başka bir bağlantıdan okunan durum commit edilmiş olmalı
+      publish.mockImplementation(() => {
+        statusSeenByPublisher = reload(wo.id).then((w) => w.status);
+      });
+
+      await service.changeWorkOrderStatus(wo.id, WorkOrderStatus.ASSIGNED, teamId, null, accountId, 'ADMIN', 1);
+
+      expect(publish).toHaveBeenCalledTimes(1);
+      await expect(statusSeenByPublisher).resolves.toBe(WorkOrderStatus.ASSIGNED);
+
+      const [changed, assigned] = publish.mock.calls[0][0];
+      expect(changed).toMatchObject({
+        eventType: WORK_ORDER_STATUS_CHANGED,
+        workOrder: { id: wo.id, code: wo.code, version: 2 },
+        fromStatus: WorkOrderStatus.OPEN,
+        toStatus: WorkOrderStatus.ASSIGNED,
+        teamId,
+        changedById: accountId,
+      });
+      expect(assigned).toMatchObject({
+        eventType: WORK_ORDER_ASSIGNED,
+        team: { id: teamId, name: 'Olay Ekibi' },
+        assignedById: accountId,
+      });
+      expect(assigned.eventType === WORK_ORDER_ASSIGNED && assigned.members.map((m) => m.id)).toEqual(activeIds);
+    });
+
+    it('ASSIGNED dışındaki geçişte yalnızca workOrderStatusChanged yayınlanır', async () => {
+      const wo = await createWorkOrder();
+
+      await service.changeWorkOrderStatus(wo.id, WorkOrderStatus.CANCELLED, null, 'İptal', accountId, 'ADMIN', 1);
+
+      expect(publish).toHaveBeenCalledTimes(1);
+      expect(publish.mock.calls[0][0].map((e) => e.eventType)).toEqual([WORK_ORDER_STATUS_CHANGED]);
+    });
+
+    it('geri alınan işlem için olay yayınlanmaz', async () => {
+      const wo = await createWorkOrder();
+
+      // Olmayan hesap id'si geçmiş kaydında FK hatası verir → tüm transaction rollback
+      await expect(
+        service.changeWorkOrderStatus(wo.id, WorkOrderStatus.ASSIGNED, teamId, null, 999999, 'ADMIN', 1),
+      ).rejects.toThrow();
+
+      expect(publish).not.toHaveBeenCalled();
+      const current = await reload(wo.id);
+      expect(current.status).toBe(WorkOrderStatus.OPEN);
+      expect(current.teamId).toBeNull();
+    });
+
+    it('iş kuralı hatasında (409) olay yayınlanmaz', async () => {
+      const wo = await createWorkOrder();
+
+      await rpcError(service.changeWorkOrderStatus(wo.id, WorkOrderStatus.COMPLETED, null, null, accountId, 'ADMIN', 1));
+
+      expect(publish).not.toHaveBeenCalled();
+    });
   });
 });

@@ -3,6 +3,8 @@ import { validateEnv } from './env.validation';
 const validEnv = {
   WORKFORCE_SERVICE_HOST: 'localhost',
   WORKFORCE_SERVICE_PORT: '4001', // .env'den gelen değerler her zaman metindir
+  NOTIFICATION_SERVICE_HOST: 'localhost',
+  NOTIFICATION_SERVICE_PORT: '4002',
   JWT_SECRET: 'test-secret-en-az-otuz-iki-karakter-uzunlukta',
 };
 
@@ -11,6 +13,7 @@ describe('api validateEnv', () => {
     const env = validateEnv(validEnv);
 
     expect(env.WORKFORCE_SERVICE_PORT).toBe(4001);
+    expect(env.NOTIFICATION_SERVICE_PORT).toBe(4002);
     expect(env.PORT).toBe(3000);
     expect(env.NODE_ENV).toBe('development');
   });

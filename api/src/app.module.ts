@@ -6,7 +6,8 @@ import { CorrelationIdMiddleware } from './common/correlation/correlation-id.mid
 import { CorrelationModule } from './common/correlation/correlation.module';
 import { HttpLoggingInterceptor } from './common/correlation/http-logging.interceptor';
 import { ApiEnv, validateEnv } from './config/env.validation';
-import { WORKFORCE_SERVICE } from './constants';
+import { NOTIFICATION_SERVICE, WORKFORCE_SERVICE } from './constants';
+import { NotificationsModule } from './notifications/notifications.module';
 import { HealthController } from './health/health.controller';
 import { TeamsModule } from './teams/teams.module';
 import { WorkforceUsersModule } from './workforce-users/workforce-users.module';
@@ -22,7 +23,7 @@ import { WorkOrdersModule } from './work-orders/work-orders.module';
     ShiftsModule,
     WorkOrdersModule,
 
-    // workforce-service istemcisi bir kez, ayardan kurulur; isGlobal ile tüm modüllerde kullanılır
+    // workforce-service ve notification-service istemcileri bir kez, ayardan kurulur; isGlobal ile tüm modüllerde kullanılır
     ClientsModule.registerAsync({
       isGlobal: true,
       clients: [
@@ -37,6 +38,17 @@ import { WorkOrdersModule } from './work-orders/work-orders.module';
             },
           }),
         },
+        {
+          name: NOTIFICATION_SERVICE,
+          inject: [ConfigService],
+          useFactory: (config: ConfigService<ApiEnv, true>) => ({
+            transport: Transport.TCP,
+            options: {
+              host: config.get('NOTIFICATION_SERVICE_HOST', { infer: true }),
+              port: config.get('NOTIFICATION_SERVICE_PORT', { infer: true }),
+            },
+          }),
+        },
       ],
     }),
 
@@ -44,6 +56,7 @@ import { WorkOrdersModule } from './work-orders/work-orders.module';
     WorkforceUsersModule,
     AccountsModule,
     AuthModule,
+    NotificationsModule,
   ],
   controllers: [HealthController],
   // APP_INTERCEPTOR: global interceptor DI ile kurulur (useGlobalInterceptors(new ...) servisi inject edemez)
