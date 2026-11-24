@@ -18,6 +18,15 @@ describe('workforce-service validateEnv', () => {
     expect(env.NODE_ENV).toBe('development');
     expect(env.RABBITMQ_QUEUE).toBe('notification_events');
     expect(env.RABBITMQ_PUBLISH_TIMEOUT_MS).toBe(3000);
+    expect(env.OVERDUE_CHECK_CRON).toBe('*/15 * * * *');
+  });
+
+  it('OVERDUE_CHECK_CRON geliştirmede her dakikaya düşürülebilir', () => {
+    expect(validateEnv({ ...validEnv, OVERDUE_CHECK_CRON: '* * * * *' }).OVERDUE_CHECK_CRON).toBe('* * * * *');
+  });
+
+  it.each(['her 15 dakika', '61 * * * *', ''])('geçersiz OVERDUE_CHECK_CRON (%p) hata verir', (value) => {
+    expect(() => validateEnv({ ...validEnv, OVERDUE_CHECK_CRON: value })).toThrow('OVERDUE_CHECK_CRON');
   });
 
   it('RABBITMQ_URL eksikse veya amqp adresi değilse hata verir', () => {

@@ -1,4 +1,5 @@
 import * as Joi from 'joi';
+import { CronTime } from 'cron';
 
 // Doğrulanmış ayarların tipi: ConfigService<WorkforceEnv, true> ile tipli okunur
 export type WorkforceEnv = {
@@ -12,6 +13,7 @@ export type WorkforceEnv = {
   RABBITMQ_URL: string;
   RABBITMQ_QUEUE: string;
   RABBITMQ_PUBLISH_TIMEOUT_MS: number;
+  OVERDUE_CHECK_CRON: string;
 };
 
 export const envValidationSchema = Joi.object<WorkforceEnv>({
@@ -36,6 +38,22 @@ export const envValidationSchema = Joi.object<WorkforceEnv>({
   RABBITMQ_QUEUE: Joi.string().default('notification_events'),
   // Olay yayını bu süreden uzun sürerse vazgeçilir ve hata loglanır
   RABBITMQ_PUBLISH_TIMEOUT_MS: Joi.number().integer().min(100).max(60000).default(3000),
+
+  // Geciken iş emri kontrolünün aralığı (cron ifadesi). Geliştirmede "* * * * *" = her dakika.
+  // Geçersiz ifade servisi açılışta durdurur; ilk tetiklenmede sessizce bozulmaz.
+  OVERDUE_CHECK_CRON: Joi.string()
+    .trim()
+    .default('*/15 * * * *')
+    .custom((value: string, helpers) => {
+      try {
+        new CronTime(value);
+        return value;
+      } catch (error) {
+        return helpers.message({
+          custom: `"OVERDUE_CHECK_CRON" geçerli bir cron ifadesi değil: ${(error as Error).message}`,
+        });
+      }
+    }),
 });
 
 export function validateEnv(config: Record<string, unknown>): WorkforceEnv {

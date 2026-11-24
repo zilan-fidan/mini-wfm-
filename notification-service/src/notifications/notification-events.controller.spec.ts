@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import { RmqContext } from '@nestjs/microservices';
-import { WORK_ORDER_ASSIGNED, WORK_ORDER_STATUS_CHANGED } from '../common/events/work-order-events';
+import { WORK_ORDER_ASSIGNED, WORK_ORDER_OVERDUE, WORK_ORDER_STATUS_CHANGED } from '../common/events/work-order-events';
 import { handleWithManualAck } from './manual-ack';
 import { NotificationEventsController } from './notification-events.controller';
 import { NotificationsService } from './notifications.service';
@@ -25,14 +25,17 @@ const rmqContext = () => {
 };
 
 describe('NotificationEventsController (manuel ack)', () => {
-  let service: { createForWorkOrderAssigned: jest.Mock };
+  let service: { createForWorkOrderAssigned: jest.Mock; createForWorkOrderOverdue: jest.Mock };
   let controller: NotificationEventsController;
   let logSpy: jest.SpyInstance;
   let errorSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.useFakeTimers();
-    service = { createForWorkOrderAssigned: jest.fn().mockResolvedValue({ created: 1, duplicate: 0 }) };
+    service = {
+      createForWorkOrderAssigned: jest.fn().mockResolvedValue({ created: 1, duplicate: 0 }),
+      createForWorkOrderOverdue: jest.fn().mockResolvedValue({ created: 1, duplicate: 0 }),
+    };
     controller = new NotificationEventsController(service as unknown as NotificationsService);
     logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation();
     errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
@@ -101,6 +104,52 @@ describe('NotificationEventsController (manuel ack)', () => {
     expect(service.createForWorkOrderAssigned).not.toHaveBeenCalled();
     expect(channel.ack).not.toHaveBeenCalled();
     expect(channel.nack).toHaveBeenCalledWith(message, false, false);
+  });
+
+  describe('workOrderOverdue', () => {
+    const overdue = (overrides: Record<string, unknown> = {}) => ({
+      eventId: randomUUID(),
+      eventType: WORK_ORDER_OVERDUE,
+      eventVersion: 1,
+      occurredAt: '2026-11-24T10:00:00.000Z',
+      correlationId: 'overdue-check-abc',
+      workOrder: { id: 9, code: 'IE-0009', title: 'Arıza', version: 2, priority: 'HIGH', status: 'ASSIGNED', dueAt: '2026-11-24T09:00:00.000Z' },
+      team: { id: 3, name: 'Saha' },
+      members: [{ id: 11, firstname: 'Ada', lastname: 'Yılmaz' }],
+      ...overrides,
+    });
+
+    it('bildirim yazıldıktan sonra ack\'ler ve correlation id\'yi loglar', async () => {
+      const { channel, message, context } = rmqContext();
+      const event = overdue();
+
+      await controller.onWorkOrderOverdue(event, context);
+
+      expect(service.createForWorkOrderOverdue).toHaveBeenCalledWith(event);
+      expect(channel.ack).toHaveBeenCalledWith(message);
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('correlationId=overdue-check-abc'));
+    });
+
+    it('ekipsiz (team: null) olay geçerlidir', async () => {
+      const { channel, context } = rmqContext();
+
+      await controller.onWorkOrderOverdue(overdue({ team: null, members: [] }), context);
+
+      expect(channel.ack).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['dueAt geçersiz', { workOrder: { id: 9, dueAt: 'dün' } }],
+      ['team nesne değil', { team: 'Saha' }],
+      ['members yok', { members: undefined }],
+    ])('geçersiz olay (%s) atılır', async (_, overrides) => {
+      const { channel, message, context } = rmqContext();
+
+      await controller.onWorkOrderOverdue(overdue(overrides), context);
+
+      expect(service.createForWorkOrderOverdue).not.toHaveBeenCalled();
+      expect(channel.nack).toHaveBeenCalledWith(message, false, false);
+    });
   });
 
   it('workOrderStatusChanged bildirim üretmeden ack\'lenir', async () => {

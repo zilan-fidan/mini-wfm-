@@ -159,13 +159,20 @@ async createWorkOrder(
     expectedVersion: number,
     data: Partial<WorkOrder>,
   ): Promise<WorkOrder> {
+    // dueAt ileri bir tarihe alınırsa gecikme işareti sıfırlanır: yeni süre de geçerse tekrar bildirilir.
+    // Aynı UPDATE içinde yapılır; ayrı bir sorgu olsaydı arada kontrol işi eski işareti görebilirdi.
+    const values: Partial<WorkOrder> =
+      data.dueAt !== undefined && new Date(data.dueAt).getTime() > Date.now()
+        ? { ...data, overdueNotifiedAt: null }
+        : data;
+
     return this.dataSource.transaction(async (manager) => {
       // Kontrol ve yazma tek sorguda: sürüm eşleşmezse hiçbir satır değişmez.
       // version = version + 1 ifadesini @VersionColumn sayesinde TypeORM ekler.
       const result = await manager
         .createQueryBuilder()
         .update(WorkOrder)
-        .set(data)
+        .set(values)
         .where('id = :id', { id })
         .andWhere('version = :expectedVersion', { expectedVersion })
         .execute();

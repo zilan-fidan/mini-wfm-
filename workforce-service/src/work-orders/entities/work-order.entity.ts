@@ -59,6 +59,15 @@ export class WorkOrder {
   })
   dueAt: Date;
 
+  // workOrderOverdue olayının yayınlandığı an; NULL = henüz yayınlanmadı.
+  // dueAt ileri bir tarihe alınınca sıfırlanır, böylece yeni süre de geçerse tekrar bildirilir.
+  @Column({
+    name: 'overdue_notified_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  overdueNotifiedAt: Date | null;
+
     // Optimistic locking: her güncellemede TypeORM otomatik olarak 1 artırır
   @VersionColumn({
     type: 'int',

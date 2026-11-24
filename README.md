@@ -167,6 +167,7 @@ Error: Config validation error:
 | `RABBITMQ_URL` | **evet** | `amqp://` / `amqps://` adresi | — | ör. `amqp://wfm:wfm@localhost:5672` |
 | `RABBITMQ_QUEUE` | hayır | metin | `notification_events` | notification-service ile aynı olmalı |
 | `RABBITMQ_PUBLISH_TIMEOUT_MS` | hayır | 100–60000 | `3000` | Olay yayını bu süreyi aşarsa vazgeçilir ve hata loglanır |
+| `OVERDUE_CHECK_CRON` | hayır | cron ifadesi | `*/15 * * * *` | Geciken iş emri kontrolünün aralığı. Geliştirmede `* * * * *` (her dakika). Geçersiz ifadede servis açılmaz |
 
 **notification-service** (`notification-service/.env`)
 
@@ -696,4 +697,99 @@ farklı veritabanı için `NOTIFICATIONS_TEST_DATABASE_URL`.
 Bildirim için `send` kullansaydık iş emri ataması notification-service'in cevabını bekler, o servis kapalıyken
 atama da başarısız olurdu. `emit` ile atama bildirimden bağımsızdır; bedeli, bildirimin "hemen" değil
 "sonunda" oluşması (eventual consistency) ve yukarıda anlatılan B23 kaybıdır.
+
+## Geciken iş emirlerinin zamanlanmış kontrolü
+
+workforce-service, kimse istek atmadan `OVERDUE_CHECK_CRON` aralığında (varsayılan 15 dakika) çalışan bir iş
+içerir (`work-orders/overdue/`). Süresi geçmiş (`due_at <= şimdi`) ve kapanmamış (`OPEN`, `ASSIGNED`,
+`IN_PROGRESS`) her iş emri için **bir kez** `workOrderOverdue` olayı yayınlar. notification-service bu olayla
+iş emrinin ekibindeki aktif üyelere "İş emri gecikti" bildirimi yazar.
+
+- Aralık ayardan gelir; bu yüzden `@Cron()` dekoratörü yerine iş açılışta `SchedulerRegistry` ile kaydedilir.
+  Geliştirmede `.env` içinde `OVERDUE_CHECK_CRON=* * * * *` yapın.
+- Her çalışma sonucu loglar (hiç kayıt yoksa da):
+
+```text
+LOG [OverdueCheckJob] Geciken iş emri kontrolü: 1 iş emri bulundu, 1 olay yayınlandı correlationId=overdue-check-… duration=28ms
+```
+
+### Bir iş emri için tek olay: `overdue_notified_at`
+
+Migration `AddOverdueNotifiedAtToWorkOrder1795500000000`, `work_order` tablosuna `overdue_notified_at` kolonunu
+ve yalnızca bekleyen kayıtları içeren kısmi bir index ekler. İş, kayıtları tek bir SQL ifadesiyle sahiplenir:
+
+```sql
+WITH due AS (
+  SELECT id FROM workforce.work_order
+  WHERE overdue_notified_at IS NULL AND status IN ('OPEN','ASSIGNED','IN_PROGRESS') AND due_at <= $1
+  ORDER BY due_at, id LIMIT 500
+  FOR UPDATE SKIP LOCKED
+)
+UPDATE workforce.work_order wo SET overdue_notified_at = $1 FROM due WHERE wo.id = due.id
+RETURNING …
+```
+
+- Sahiplenilen kayıt sonraki çalışmalarda gelmez (`overdue_notified_at IS NULL` koşulu).
+- Olaylar sahiplenme commit edildikten **sonra** yayınlanır (B22). Olaydaki ekip ve aktif üye listesi aynı
+  transaction'da okunur.
+- Sahiplenme `version` ve `updated_at` değerlerine dokunmaz. Bu bir sistem işaretidir; kullanıcının elindeki
+  sürümü eskitip `409` almasına yol açmamalı. Bu yüzden TypeORM'un update builder'ı (version'ı artırır) yerine
+  ham SQL kullanılır.
+- `PATCH /api/work-orders/:id` ile `dueAt` ileri bir tarihe alınırsa `overdue_notified_at` aynı UPDATE'te
+  `NULL` olur; yeni süre de geçerse tekrar bildirilir. Başka alanların güncellenmesi işareti değiştirmez.
+- Bir çalışmada en fazla 500 kayıt alınır, kalanlar sonraki çalışmaya kalır. Bir çalışma aralıktan uzun sürerse
+  aynı kopyada sıradaki tetikleme atlanır (üst üste binmez).
+
+**Yayın başarısız olursa** (RabbitMQ kapalı): o kaydın sahiplenmesi geri alınır ve sonraki çalışmada yeniden
+denenir. İş emri isteklerinden farklı olarak burada olay kaybolmaz, çünkü işaret yayın başarısız olunca geri
+alınıyor. `eventId` iş emri ve `dueAt`'ten türetilir (UUID biçiminde SHA-256 özeti), yani yeniden denemede aynı
+kimlik gider. Yayın aslında ulaşmış ama zaman aşımına düşmüşse notification-service ikinci olayı tanır ve
+bildirimi tekrar yazmaz. `dueAt` değişince eventId de değişir, böylece yeni gecikme ayrı bir bildirim olur.
+
+Kalan risk: sahiplenme commit edildikten hemen sonra, yayından önce süreç çökerse o olay kaybolur (işaret dolu
+kalır). Bunu kapatmanın yolu yine transactional outbox.
+
+### Nasıl denenir?
+
+1. `workforce-service/.env` içinde `OVERDUE_CHECK_CRON=* * * * *` yapın, servisleri başlatın.
+2. Bitiş tarihi 2–3 dakika sonra olan bir iş emri oluşturun ve aktif üyesi olan bir ekibe atayın.
+3. Süre dolduktan sonraki ilk çalışmada logda `1 iş emri bulundu, 1 olay yayınlandı` görünür; notification-service
+   logunda `workOrderOverdue … created=<üye sayısı>`. `GET /api/notifications?workforceUserId=<üye id>` bildirimi döner.
+4. Sonraki çalışmalarda `0 iş emri bulundu` yazar; yeni bildirim oluşmaz.
+
+### Testler
+
+```bash
+cd workforce-service
+npm test -- --runInBand src/work-orders/overdue   # PostgreSQL entegrasyonu + zamanlanmış iş
+npm test -- --runInBand src/config
+cd ../notification-service && pnpm test
+```
+
+| Kabul kriteri | Test |
+|---|---|
+| Geciken her iş emri için tek olay | `overdue-work-orders.integration.spec.ts` (tekrar çalışma, iki kopya aynı anda) |
+| Kapanmış iş emirleri için olay yok | `overdue-work-orders.integration.spec.ts` |
+| Her çalışmada bulunan sayı loglanıyor | `overdue-check.job.spec.ts` |
+
+### Mentorla konuşulacak: servisin birden fazla kopyası çalışsaydı?
+
+Zamanlayıcı her kopyanın kendi içinde çalışır. 3 kopya varsa iş her 15 dakikada 3 kez tetiklenir.
+
+- **Korumasız olsaydı:** Üç kopya da aynı geciken iş emirlerini bulur, her biri olay yayınlardı; her üye aynı
+  gecikme için 3 bildirim alırdı. "Önce SELECT, sonra UPDATE" yazılsaydı da sorun kalırdı: kopyalar aynı satırları
+  aynı anda okuyup ikisi de "henüz bildirilmemiş" görürdü.
+- **Bu çözümde:** Sahiplenme tek ifadedir ve `FOR UPDATE SKIP LOCKED` kullanır. Bir kopyanın kilitlediği satırı
+  diğer kopya beklemeden atlar; her iş emri tam olarak bir kopyaya düşer. Entegrasyon testi iki eşzamanlı
+  çalışmayla bunu doğrular. İkinci güvenlik ağı: eventId sabit olduğu için aynı olay iki kez gitse bile
+  notification-service bildirimi bir kez yazar.
+- **Hâlâ kalanlar:**
+  - Bütün kopyalar her aralıkta sorgu çalıştırır; işi biri yapar, diğerleri boş döner (gereksiz yük, ama küçük).
+  - Kopyaların saatleri farklıysa "şimdi" değeri birkaç saniye kayabilir; sonuç değişmez, yalnızca zamanlama.
+  - "Önceki çalışma sürüyor, atla" koruması kopya başınadır, kopyalar arası değildir; burada bu sorun değil,
+    çünkü kopyalar arasında satır kilitleri koruyor.
+- **Alternatifler:**
+  - PostgreSQL advisory lock (`pg_try_advisory_lock`): yalnızca kilidi alan kopya işi çalıştırır.
+  - Zamanlanmış işi ayrı, tek kopya çalışan bir worker sürecine taşımak.
+  - Kubernetes CronJob gibi platformun zamanlayıcısı ya da lider seçimi.
 

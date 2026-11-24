@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import { HealthController } from './health/health.controller';
 import { TeamsModule } from './teams/teams.module';
@@ -20,6 +21,8 @@ import { WorkOrdersModule } from './work-orders/work-orders.module';
   validate: validateEnv,
 }),
     CorrelationModule,
+    // Zamanlanmış işler (SchedulerRegistry); geciken iş emri kontrolü WorkOrdersModule'de kaydedilir
+    ScheduleModule.forRoot(),
     AccountsModule,
     ShiftsModule,
     WorkOrdersModule,

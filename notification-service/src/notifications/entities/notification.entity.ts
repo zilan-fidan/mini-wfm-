@@ -2,6 +2,7 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique
 
 export enum NotificationType {
   WORK_ORDER_ASSIGNED = 'WORK_ORDER_ASSIGNED',
+  WORK_ORDER_OVERDUE = 'WORK_ORDER_OVERDUE',
 }
 
 // Bir olay birden çok personele bildirim üretir (ekibin her aktif üyesi).

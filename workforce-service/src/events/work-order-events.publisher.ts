@@ -48,18 +48,27 @@ export class WorkOrderEventsPublisher {
 
   // Fire-and-forget: çağıran beklemez, yanıt RabbitMQ'yu beklemeden döner
   publish(drafts: WorkOrderEventDraft[]): void {
-    const correlationId = this.correlationContext.getCorrelationId() ?? null;
-
     for (const draft of drafts) {
-      const event = {
-        ...draft,
-        eventId: randomUUID(),
-        eventVersion: 1,
-        correlationId,
-      } as WorkOrderEvent;
-
-      void this.publishOne(event);
+      void this.publishOne(this.toEvent(draft));
     }
+  }
+
+  /**
+   * Arka plan işleri için: yayının sonucunu bekler (true = broker onayladı).
+   * HTTP isteği beklemediği için burada beklemek B23'ü bozmaz; sonuca göre tekrar denenebilir.
+   * eventId verilirse o kullanılır: tekrar denemede aynı kimlik gider, tüketici ikinciyi yok sayar.
+   */
+  publishAndConfirm(draft: WorkOrderEventDraft, eventId?: string): Promise<boolean> {
+    return this.publishOne(this.toEvent(draft, eventId));
+  }
+
+  private toEvent(draft: WorkOrderEventDraft, eventId: string = randomUUID()): WorkOrderEvent {
+    return {
+      ...draft,
+      eventId,
+      eventVersion: 1,
+      correlationId: this.correlationContext.getCorrelationId() ?? null,
+    } as WorkOrderEvent;
   }
 
   // Hata fırlatmaz; sonuç loglanır ve test için boolean döner

@@ -95,6 +95,16 @@ describe('WorkOrderEventsPublisher', () => {
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Timeout'));
   });
 
+  it('publishAndConfirm verilen eventId ile yayınlar ve sonucu döner', async () => {
+    const eventId = '11111111-2222-5333-8444-555555555555';
+
+    await expect(publisher.publishAndConfirm(draft(), eventId)).resolves.toBe(true);
+    expect((emit.mock.calls[0][1] as RmqRecord<WorkOrderEvent>).data.eventId).toBe(eventId);
+
+    emit.mockReturnValue(throwError(() => new Error('down')));
+    await expect(publisher.publishAndConfirm(draft(), eventId)).resolves.toBe(false);
+  });
+
   it('publish çağıranı beklemez: emit tamamlanmadan döner', () => {
     emit.mockReturnValue(NEVER);
     const result = publisher.publish([draft()]);

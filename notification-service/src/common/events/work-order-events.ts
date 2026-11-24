@@ -1,5 +1,6 @@
 export const WORK_ORDER_STATUS_CHANGED = 'workOrderStatusChanged';
 export const WORK_ORDER_ASSIGNED = 'workOrderAssigned';
+export const WORK_ORDER_OVERDUE = 'workOrderOverdue';
 
 //  her olay benzersiz eventId taşır; tüketici aynı eventId'yi ikinci kez işlemez
 interface EventEnvelope {
@@ -34,6 +35,14 @@ export interface WorkOrderAssignedEvent extends EventEnvelope {
   // Atama anındaki aktif üyeler; tüketici workforce-service'e geri sormaz
   members: { id: number; firstname: string; lastname: string }[];
   assignedById: number;
+}
+
+export interface WorkOrderOverdueEvent extends EventEnvelope {
+  eventType: typeof WORK_ORDER_OVERDUE;
+  workOrder: WorkOrderSnapshot & { priority: string; dueAt: string; status: string };
+  // Ekipsiz iş emri de gecikebilir; o zaman team null, members boş
+  team: { id: number; name: string } | null;
+  members: { id: number; firstname: string; lastname: string }[];
 }
 
 // Kalıcı hata: mesaj kaç kez denenirse denensin işlenemez, kuyruğa geri konmaz
@@ -74,6 +83,25 @@ export function parseWorkOrderAssignedEvent(data: unknown): WorkOrderAssignedEve
     throw new InvalidEventError(`${WORK_ORDER_ASSIGNED}: geçersiz members`);
   }
   return event as unknown as WorkOrderAssignedEvent;
+}
+
+export function parseWorkOrderOverdueEvent(data: unknown): WorkOrderOverdueEvent {
+  const event = parseEnvelope(data, WORK_ORDER_OVERDUE);
+  const workOrder = event.workOrder as Record<string, unknown>;
+
+  if (typeof workOrder.dueAt !== 'string' || Number.isNaN(Date.parse(workOrder.dueAt))) {
+    throw new InvalidEventError(`${WORK_ORDER_OVERDUE}: geçersiz workOrder.dueAt`);
+  }
+  if (event.team !== null && (!isObject(event.team) || !isPositiveInt(event.team.id))) {
+    throw new InvalidEventError(`${WORK_ORDER_OVERDUE}: geçersiz team`);
+  }
+  if (
+    !Array.isArray(event.members) ||
+    !event.members.every((m) => isObject(m) && isPositiveInt(m.id))
+  ) {
+    throw new InvalidEventError(`${WORK_ORDER_OVERDUE}: geçersiz members`);
+  }
+  return event as unknown as WorkOrderOverdueEvent;
 }
 
 export function parseWorkOrderStatusChangedEvent(data: unknown): WorkOrderStatusChangedEvent {

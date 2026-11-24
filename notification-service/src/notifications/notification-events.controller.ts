@@ -1,7 +1,7 @@
 import { Controller, Logger } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, RmqContext, Transport } from '@nestjs/microservices';
 import { safeCorrelationId } from '../common/correlation/correlation-id';
-import {WORK_ORDER_ASSIGNED,WORK_ORDER_STATUS_CHANGED,parseWorkOrderAssignedEvent, parseWorkOrderStatusChangedEvent,} from '../common/events/work-order-events';
+import {WORK_ORDER_ASSIGNED,WORK_ORDER_OVERDUE,WORK_ORDER_STATUS_CHANGED,parseWorkOrderAssignedEvent,parseWorkOrderOverdueEvent, parseWorkOrderStatusChangedEvent,} from '../common/events/work-order-events';
 import { handleWithManualAck } from './manual-ack';
 import { NotificationsService } from './notifications.service';
 
@@ -29,6 +29,21 @@ export class NotificationEventsController {
 
       this.logger.log(
         `${label} workOrderId=${event.workOrder.id} teamId=${event.team.id} ` +
+          `members=${event.members.length} created=${created} duplicate=${duplicate}`,
+      );
+    });
+  }
+
+  @EventPattern<string>(WORK_ORDER_OVERDUE, Transport.RMQ)
+  onWorkOrderOverdue(@Payload() data: unknown, @Ctx() context: RmqContext) {
+    const label = describe(WORK_ORDER_OVERDUE, data);
+
+    return handleWithManualAck(context, this.logger, label, async () => {
+      const event = parseWorkOrderOverdueEvent(data);
+      const { created, duplicate } = await this.notificationsService.createForWorkOrderOverdue(event);
+
+      this.logger.log(
+        `${label} workOrderId=${event.workOrder.id} teamId=${event.team?.id ?? '-'} ` +
           `members=${event.members.length} created=${created} duplicate=${duplicate}`,
       );
     });

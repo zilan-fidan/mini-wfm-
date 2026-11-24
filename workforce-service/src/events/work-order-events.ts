@@ -1,5 +1,6 @@
 export const WORK_ORDER_STATUS_CHANGED = 'workOrderStatusChanged';
 export const WORK_ORDER_ASSIGNED = 'workOrderAssigned';
+export const WORK_ORDER_OVERDUE = 'workOrderOverdue';
 
 // her olay benzersiz eventId taşır; tüketici aynı eventId'yi ikinci kez işlemez.
 // Olay, tüketicinin işini yapması için gereken bilgiyi kendisi taşır; tüketici geri sormaz.
@@ -38,7 +39,20 @@ export interface WorkOrderAssignedEvent extends EventEnvelope {
   assignedById: number;
 }
 
-export type WorkOrderEvent = WorkOrderStatusChangedEvent | WorkOrderAssignedEvent;
+// Zamanlanmış kontrol, süresi geçmiş ve kapanmamış her iş emri için bir kez yayınlar
+export interface WorkOrderOverdueEvent extends EventEnvelope {
+  eventType: typeof WORK_ORDER_OVERDUE;
+  workOrder: WorkOrderSnapshot & { priority: string; dueAt: string; status: string };
+  // Ekipsiz (OPEN) iş emri de gecikebilir; o zaman team null, members boş
+  team: { id: number; name: string } | null;
+  // Kontrol anındaki aktif üyeler
+  members: { id: number; firstname: string; lastname: string }[];
+}
+
+export type WorkOrderEvent =
+  | WorkOrderStatusChangedEvent
+  | WorkOrderAssignedEvent
+  | WorkOrderOverdueEvent;
 
 // Servis transaction içinde olayın içeriğini hazırlar; kimlik ve correlation id'yi yayıncı ekler
 type Draft<T> = T extends unknown ? Omit<T, 'eventId' | 'eventVersion' | 'correlationId'> : never;

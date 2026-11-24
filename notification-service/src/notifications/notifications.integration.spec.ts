@@ -3,7 +3,7 @@ import { DataSource, getMetadataArgsStorage } from 'typeorm';
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import { RmqContext } from '@nestjs/microservices';
 import { Logger } from '@nestjs/common';
-import { WORK_ORDER_ASSIGNED, WorkOrderAssignedEvent } from '../common/events/work-order-events';
+import { WORK_ORDER_ASSIGNED, WORK_ORDER_OVERDUE, WorkOrderAssignedEvent, WorkOrderOverdueEvent } from '../common/events/work-order-events';
 import { Notification } from './entities/notification.entity';
 import { NotificationEventsController } from './notification-events.controller';
 import { NotificationsService } from './notifications.service';
@@ -29,6 +29,21 @@ const rmqContext = () => {
   const message = { content: Buffer.from('') };
   return { channel, context: new RmqContext([message, channel, WORK_ORDER_ASSIGNED]) };
 };
+
+const overdueEvent = (overrides: Partial<WorkOrderOverdueEvent> = {}): WorkOrderOverdueEvent => ({
+  eventId: randomUUID(),
+  eventType: WORK_ORDER_OVERDUE,
+  eventVersion: 1,
+  occurredAt: new Date().toISOString(),
+  correlationId: 'overdue-check-test',
+  workOrder: { id: 9, code: 'IE-0009', title: 'Pompa arızası', version: 2, priority: 'HIGH', status: 'ASSIGNED', dueAt: '2026-11-24T09:00:00.000Z' },
+  team: { id: 3, name: 'Saha Ekibi' },
+  members: [
+    { id: 31, firstname: 'Ada', lastname: 'Yılmaz' },
+    { id: 32, firstname: 'Ali', lastname: 'Demir' },
+  ],
+  ...overrides,
+});
 
 // Gerçek PostgreSQL; yalnızca bu test için oluşturulan şema kullanılır.
 describe('Bildirim idempotency (PostgreSQL entegrasyon)', () => {
@@ -121,5 +136,35 @@ describe('Bildirim idempotency (PostgreSQL entegrasyon)', () => {
     await service.createForWorkOrderAssigned(assignedEvent({ members }));
 
     expect(await db.getRepository(Notification).countBy({ workforceUserId: 21 })).toBe(2);
+  });
+
+  it('gecikme olayı ekibin her üyesine "İş emri gecikti" bildirimi yazar (saat İstanbul saatiyle)', async () => {
+    const event = overdueEvent();
+
+    await expect(service.createForWorkOrderOverdue(event)).resolves.toEqual({ created: 2, duplicate: 0 });
+
+    const rows = await db.getRepository(Notification).find({ where: { eventId: event.eventId }, order: { workforceUserId: 'ASC' } });
+    expect(rows.map((r) => r.workforceUserId)).toEqual([31, 32]);
+    expect(rows[0]).toMatchObject({
+      type: 'WORK_ORDER_OVERDUE',
+      title: 'İş emri gecikti: IE-0009',
+      body: '"Pompa arızası" iş emrinin bitiş zamanı (24.11.2026 12:00) geçti.',
+    });
+  });
+
+  it('aynı gecikme olayı tekrar gelirse (yayıncının yeniden denemesi) bildirim bir kez oluşur', async () => {
+    const event = overdueEvent();
+
+    await service.createForWorkOrderOverdue(event);
+    await expect(service.createForWorkOrderOverdue(event)).resolves.toEqual({ created: 0, duplicate: 2 });
+
+    expect(await countFor(event.eventId)).toBe(2);
+  });
+
+  it('ekipsiz geciken iş emri için bildirim yazılmaz', async () => {
+    const event = overdueEvent({ team: null, members: [] });
+
+    await expect(service.createForWorkOrderOverdue(event)).resolves.toEqual({ created: 0, duplicate: 0 });
+    expect(await countFor(event.eventId)).toBe(0);
   });
 });
