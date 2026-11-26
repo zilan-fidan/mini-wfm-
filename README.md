@@ -83,6 +83,28 @@ cd api && pnpm install && cd ..
 cd web && pnpm install && cd ..
 ```
 
+## Tüm backend'i Docker ile çalıştırma
+
+PostgreSQL, RabbitMQ, `workforce-service`, `notification-service` ve `api` tek komutla açılır (önce [3. adımdaki](#3-ortam-değişkenlerini-hazırlayın) `.env` dosyaları hazır olmalı):
+
+```bash
+docker compose --profile app up -d --build
+```
+
+- Açılış sırası healthcheck'lerle sağlanır: PostgreSQL ve RabbitMQ `healthy` olmadan `workforce-service` başlamaz; `workforce-service` migration'larını bitirip TCP portunu açınca `notification-service`, ikisi hazır olunca `api` başlar.
+- Migration'lar servisler açılırken otomatik çalışır; ilk admin hesabı `workforce-service/.env` içindeki `INITIAL_ADMIN_*` değerleriyle oluşturulur.
+- Swagger: http://localhost:3000/docs
+- Container'lar birbirine servis adıyla ulaşır (`postgres:5432`, `rabbitmq:5672`, `workforce-service:4001`, `notification-service:4002`). `.env` dosyaları container'a çalışma zamanında verilir; `docker-compose.yaml` içindeki `environment` bölümü buradaki `localhost` adreslerini container adresleriyle ezer. `.env` imaja kopyalanmaz.
+- İmajlar multi-stage build ile üretilir: son imajda yalnız derlenmiş `dist/` ve üretim bağımlılıkları bulunur, uygulama root olmayan `node` kullanıcısıyla çalışır.
+
+```bash
+docker compose --profile app ps          # durum ve health bilgisi
+docker compose --profile app logs -f api # logları izler
+docker compose --profile app down        # tümünü kapatır, veriler korunur
+```
+
+Yerel geliştirmede yalnız altyapıyı açmak için `docker compose up -d` yeterlidir; `app` profilindeki servisler bu komutla açılmaz. Uygulama container'ları çalışırken yerelde `pnpm start:dev` açarsanız portlar (3000) çakışır; önce `docker compose --profile app stop api workforce-service notification-service` ile durdurun.
+
 ## Çalıştırma
 
 **Sıra önemlidir:** `docker compose up -d` (PostgreSQL + RabbitMQ) → `workforce-service` → `notification-service` → `api` → `web`. Her biri için ayrı bir terminal açın.
@@ -272,7 +294,7 @@ docker compose logs -f postgres  # logları izler
 
 ```text
 mini-wfm/
-├── docker-compose.yaml        # PostgreSQL + RabbitMQ
+├── docker-compose.yaml        # PostgreSQL + RabbitMQ; "app" profili: api + servisler
 ├── web/
 │   └── src/
 │       ├── api/               # HTTP istekleri (axios)

@@ -1,0 +1,19 @@
+# Bağımlılıklar ve derleme çıktısı imaj içinde yeniden üretilir
+node_modules
+dist
+*.tsbuildinfo
+coverage
+
+# Ortam dosyaları imaja girmez; ayarlar container'a çalışma zamanında verilir
+.env
+.env.*
+
+# Derlemeye katılmayan dosyalar
+test
+.git
+.vscode
+.idea
+.DS_Store
+*.md
+Dockerfile
+.dockerignore

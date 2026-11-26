@@ -1,3 +1,19 @@
+# Kullanım:
+#   docker compose up -d                          → yalnız altyapı (PostgreSQL + RabbitMQ); uygulamalar yerelde pnpm start:dev ile çalışır
+#   docker compose --profile app up -d --build    → tüm backend (altyapı + workforce-service + notification-service + api)
+#
+# Profili olmayan servisler her zaman açılır; "app" profilindekiler yalnız --profile app verilince açılır.
+# Container'lar birbirine servis adıyla ulaşır (postgres:5432, rabbitmq:5672, workforce-service:4001 ...).
+# localhost ve 5433 yalnız bilgisayardan (yerel geliştirme) bağlanırken geçerlidir.
+
+x-db-env: &db-env
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_USERNAME: postgres
+  DB_PASSWORD: postgres
+  DB_DATABASE: mini_wfm
+  RABBITMQ_URL: amqp://wfm:wfm@rabbitmq:5672
+
 services:
   postgres:
     image: postgres:16
@@ -13,6 +29,14 @@ services:
 
     volumes:
       - mini_wfm_postgres_data:/var/lib/postgresql/data
+
+    # Port açık olması yetmez: veritabanı bağlantı kabul ettiğinde "healthy" olur
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mini_wfm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   rabbitmq:
     # "-management" etiketi yönetim arayüzünü içerir: http://localhost:15672 (wfm / wfm)
@@ -38,6 +62,87 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
+
+  workforce-service:
+    profiles: [app]
+    build: ./workforce-service
+    image: mini-wfm/workforce-service
+    container_name: mini-wfm-workforce-service
+    # Gizli değerler (INITIAL_ADMIN_* vb.) yerel .env'den çalışma zamanında okunur; imaja girmez.
+    # "environment" env_file'daki değerleri ezer: localhost adresleri container adresleriyle değişir.
+    env_file: ./workforce-service/.env
+    environment:
+      <<: *db-env
+      NODE_ENV: production
+      PORT: 4001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    # TCP portu migration'lar bittikten sonra açılır; port cevap verince servis hazırdır
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(4001,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  notification-service:
+    profiles: [app]
+    build: ./notification-service
+    image: mini-wfm/notification-service
+    container_name: mini-wfm-notification-service
+    env_file: ./notification-service/.env
+    environment:
+      <<: *db-env
+      NODE_ENV: production
+      PORT: 4002
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      # Migration'lar aynı veritabanında sırayla çalışsın (ör. CREATE EXTENSION yarışmasın)
+      workforce-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(4002,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  api:
+    profiles: [app]
+    build: ./api
+    image: mini-wfm/api
+    container_name: mini-wfm-api
+    env_file: ./api/.env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      WORKFORCE_SERVICE_HOST: workforce-service
+      WORKFORCE_SERVICE_PORT: 4001
+      NOTIFICATION_SERVICE_HOST: notification-service
+      NOTIFICATION_SERVICE_PORT: 4002
+    ports:
+      - "3000:3000"   # Swagger: http://localhost:3000/docs
+    depends_on:
+      workforce-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
 
 volumes:
   mini_wfm_postgres_data:
