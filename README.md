@@ -793,3 +793,65 @@ Zamanlayıcı her kopyanın kendi içinde çalışır. 3 kopya varsa iş her 15 
   - Zamanlanmış işi ayrı, tek kopya çalışan bir worker sürecine taşımak.
   - Kubernetes CronJob gibi platformun zamanlayıcısı ya da lider seçimi.
 
+
+## WFM-41 — Ekip Özet Raporu
+
+`GET /api/reports/team-summary?from=&to=` (ADMIN, PLANNER, VIEWER). Aralık `[from, to)`, en fazla 31 gün. Her ekip için bir satır döner; hiç verisi olmayan ekipler de 0 değerleriyle listededir.
+
+```json
+{
+  "from": "2026-11-01T00:00:00.000Z",
+  "to": "2026-11-08T00:00:00.000Z",
+  "teams": [
+    {
+      "teamId": 1,
+      "teamName": "Alfa",
+      "activeMemberCount": 2,
+      "workOrders": { "OPEN": 1, "ASSIGNED": 2, "IN_PROGRESS": 1, "COMPLETED": 1, "CANCELLED": 1, "overdue": 3 },
+      "shiftHours": 19
+    }
+  ]
+}
+```
+
+### Kurallar
+
+| Alan | Nasıl hesaplanır |
+|---|---|
+| `activeMemberCount` | Ekipteki `is_active = true` personel sayısı |
+| `workOrders.<DURUM>` | `due_at` değeri `[from, to)` içinde olan ve ekibe atanmış iş emirleri, duruma göre |
+| `workOrders.overdue` | Aynı iş emirlerinden `due_at < şimdi` ve COMPLETED/CANCELLED olmayanlar (listedeki `isOverdue` ile aynı kural) |
+| `shiftHours` | Ekip üyelerinin aralıkla kesişen vardiyaları; yalnızca aralık içindeki kısım: `LEAST(end_at, to) - GREATEST(start_at, from)`. Pasif üyelerin çalıştığı saatler de sayılır. 2 basamağa yuvarlanır |
+
+### Tek sorgu
+
+Rapor, ekip sayısından bağımsız olarak **tek bir SQL sorgusuyla** üretilir ([team-summary.service.ts](workforce-service/src/reports/team-summary.service.ts)). Üye, iş emri ve vardiya sayıları ayrı CTE'lerde kendi başlarına `GROUP BY team_id` ile toplanır, sonra `team` tablosuna `LEFT JOIN` edilir:
+
+- Üç tabloyu doğrudan join'leyip sonra gruplamak satırları çoğaltırdı (3 üye × 4 iş emri = 12 satır, sayılar şişer).
+- `LEFT JOIN` + `COALESCE(..., 0)`: verisi olmayan ekip de listeye girer.
+- Durum sayıları tek taramada koşullu sayma ile alınır: `COUNT(*) FILTER (WHERE status = 'OPEN')`.
+
+### Elle kontrol (DBeaver)
+
+```sql
+-- Bir ekibin durum sayıları
+SELECT status, COUNT(*) FROM workforce.work_order
+WHERE team_id = 1 AND due_at >= '2026-11-01T00:00:00Z' AND due_at < '2026-11-08T00:00:00Z'
+GROUP BY status;
+
+-- Geciken
+SELECT COUNT(*) FROM workforce.work_order
+WHERE team_id = 1 AND due_at >= '2026-11-01T00:00:00Z' AND due_at < '2026-11-08T00:00:00Z'
+  AND due_at < now() AND status NOT IN ('COMPLETED', 'CANCELLED');
+
+-- Aralık içindeki vardiya saati
+SELECT SUM(EXTRACT(EPOCH FROM LEAST(s.end_at, '2026-11-08T00:00:00Z') - GREATEST(s.start_at, '2026-11-01T00:00:00Z'))) / 3600
+FROM workforce.shift s JOIN workforce.workforce_user wu ON wu.id = s.workforce_user_id
+WHERE wu.team_id = 1 AND s.start_at < '2026-11-08T00:00:00Z' AND s.end_at > '2026-11-01T00:00:00Z';
+```
+
+workforce-service'te TypeORM `logging: 'all'` açık olduğundan, rapor isteği sırasında logda tek bir `query:` satırı görünür.
+
+### Testler
+
+[team-summary.integration.spec.ts](workforce-service/src/reports/team-summary.integration.spec.ts) gerçek PostgreSQL'de, ayrı bir şemada bilinen bir veri seti kurar ve şunları kontrol eder: durum ve geciken sayıları, aralık sınırları (`from` dahil, `to` hariç), kısmen aralığa giren vardiyaların kırpılması, verisi olmayan ekibin 0 ile gelmesi, 3 ekipte de 23 ekipte de tek sorgu çalışması ve geçersiz aralıkların reddedilmesi. API'deki query doğrulaması [team-summary.spec.ts](api/src/reports/team-summary.spec.ts) dosyasında test edilir.

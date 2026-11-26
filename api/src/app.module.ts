@@ -15,6 +15,7 @@ import { AccountsModule } from './accounts/accounts.module';
 import { AuthModule } from './auth/auth.module';
 import { ShiftsModule } from './shifts/shifts.module';
 import { WorkOrdersModule } from './work-orders/work-orders.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { WorkOrdersModule } from './work-orders/work-orders.module';
     AccountsModule,
     AuthModule,
     NotificationsModule,
+    ReportsModule,
   ],
   controllers: [HealthController],
   // APP_INTERCEPTOR: global interceptor DI ile kurulur (useGlobalInterceptors(new ...) servisi inject edemez)

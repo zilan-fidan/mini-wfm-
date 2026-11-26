@@ -13,6 +13,7 @@ import { RpcLoggingInterceptor } from './common/correlation/rpc-logging.intercep
 import { AccountsModule } from './account/accounts.module';
 import { ShiftsModule } from './shifts/shifts.module';
 import { WorkOrdersModule } from './work-orders/work-orders.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { WorkOrdersModule } from './work-orders/work-orders.module';
     AccountsModule,
     ShiftsModule,
     WorkOrdersModule,
+    ReportsModule,
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService<WorkforceEnv, true>) => ({
