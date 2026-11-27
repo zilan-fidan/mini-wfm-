@@ -1,0 +1,29 @@
+.brand-mark {
+  flex-shrink: 0;
+  display: block;
+}
+
+.brand-mark line {
+  transform-origin: 24px 24px;
+  transform-box: view-box;
+}
+
+.brand-mark--animated .brand-mark__minute {
+  animation: brand-tick 6s linear infinite;
+}
+
+.brand-mark--animated .brand-mark__hour {
+  animation: brand-tick 72s linear infinite;
+}
+
+@keyframes brand-tick {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-mark line {
+    animation: none !important;
+  }
+}

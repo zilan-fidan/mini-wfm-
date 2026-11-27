@@ -2,12 +2,11 @@ import '@ant-design/v5-patch-for-react-19'; // antd statik metotları (Modal.suc
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
-import { ConfigProvider } from 'antd';
-import trTR from 'antd/locale/tr_TR';
 import dayjs from 'dayjs';
 import 'dayjs/locale/tr';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
+import AuthProvider from './auth/AuthProvider';
 import './index.css';
 
 dayjs.locale('tr');
@@ -24,11 +23,11 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <ConfigProvider locale={trTR}>
-        <BrowserRouter>
+      <BrowserRouter>
+        <AuthProvider>
           <App />
-        </BrowserRouter>
-      </ConfigProvider>
+        </AuthProvider>
+      </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,
 );
