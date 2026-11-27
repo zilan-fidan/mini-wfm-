@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
+import { Role, Roles } from './decorators/roles.decorator';
 import type { JwtPayload } from './types/jwt-payload.type';
 
 @Controller('auth')
@@ -20,8 +21,10 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
-  // Token sahibi kendi bilgilerini görüntüler
+  // Token sahibi kendi bilgilerini görüntüler; her rol erişebilir
+  // (@Roles olmayan uçlar varsayılan olarak sadece ADMIN'e açık)
   @ApiBearerAuth('access-token')
+  @Roles(Role.ADMIN, Role.PLANNER, Role.VIEWER)
   @Get('me')
   getMe(@CurrentUser() user: JwtPayload) {
     return {
