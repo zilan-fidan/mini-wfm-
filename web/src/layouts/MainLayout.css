@@ -1,0 +1,379 @@
+.app-layout {
+  --chrome-pattern-glow: rgba(107, 97, 212, 0.065);
+  --header-wave-color: 107, 97, 212;
+  --sider-pattern-color: 107, 97, 212;
+  min-height: 100vh;
+}
+
+:root[data-color-mode='dark'] .app-layout {
+  --chrome-pattern-glow: rgba(105, 128, 43, 0.085);
+  --header-wave-color: 115, 130, 48;
+  --sider-pattern-color: 105, 128, 43;
+}
+
+.app-layout .ant-layout-sider.app-sider {
+  background-image:
+    radial-gradient(ellipse at top left, var(--chrome-pattern-glow), transparent 66%),
+    radial-gradient(ellipse at bottom left, rgba(var(--sider-pattern-color), 0.12), transparent 72%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%, 100% 220px;
+  background-position: left top, left bottom;
+}
+
+.app-layout .ant-layout-header.app-header {
+  background-image: linear-gradient(110deg, var(--chrome-pattern-glow), transparent 70%);
+}
+
+.app-sider {
+  position: sticky !important;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  border-right: 1px solid #e1e4ed;
+}
+
+.app-sider__map {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  z-index: -1;
+  width: min(94%, 188px);
+  height: min(132px, 20vh);
+  background:
+    linear-gradient(34deg, transparent 28%, rgba(var(--sider-pattern-color), 0.14) 29% 32%, transparent 33%),
+    linear-gradient(117deg, transparent 56%, rgba(var(--sider-pattern-color), 0.11) 57% 61%, transparent 62%);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.app-sider__map::before,
+.app-sider__map::after,
+.app-sider__route-secondary::before,
+.app-sider__route-secondary::after {
+  position: absolute;
+  z-index: 1;
+  width: clamp(17px, 14%, 27px);
+  aspect-ratio: 1;
+  border-radius: 50% 50% 50% 0;
+  background:
+    radial-gradient(circle at center, rgba(var(--sider-pattern-color), 0.27) 17%, transparent 19%),
+    rgba(var(--sider-pattern-color), 0.62);
+  transform: translate(-50%, -95%) rotate(-45deg);
+  content: '';
+}
+
+.app-sider__map::before {
+  top: 38%;
+  left: 23%;
+}
+
+.app-sider__map::after {
+  top: 72%;
+  left: 77%;
+}
+
+.app-sider__route {
+  position: absolute;
+  inset: 38% 23% 28%;
+  border: 2px dashed rgba(var(--sider-pattern-color), 0.55);
+  border-width: 0 0 2px 2px;
+  border-bottom-left-radius: 65% 100%;
+}
+
+.app-sider__route-secondary {
+  position: absolute;
+  top: 82%;
+  left: 12%;
+  width: 69%;
+  border-top: 2px dashed rgba(var(--sider-pattern-color), 0.44);
+  transform: rotate(-32deg);
+  transform-origin: left center;
+}
+
+.app-sider__route-secondary::before,
+.app-sider__route-secondary::after {
+  top: 0;
+  width: clamp(13px, 16%, 19px);
+  transform: translate(-50%, -88%) rotate(-13deg);
+}
+
+.app-sider__route-secondary::before {
+  left: 0;
+}
+
+.app-sider__route-secondary::after {
+  left: 100%;
+}
+
+.app-sider .ant-menu {
+  border: none !important;
+  background: transparent !important;
+}
+
+.app-sider .ant-menu-item-selected {
+  box-shadow: 0 10px 20px -12px rgba(28, 37, 65, 0.8);
+}
+
+.app-sider__brand {
+  padding: 28px 16px 12px;
+}
+
+.app-sider__brand-mark {
+  position: relative;
+  width: 40px;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 24%;
+}
+
+/* Görselin beyaz dış payını ikon çerçevesinin dışında bırak. */
+.app-sider__brand-mark img {
+  position: absolute;
+  top: -8.7%;
+  left: -10.6%;
+  width: 145.3%;
+  height: 116.7%;
+}
+
+:root[data-color-mode='dark'] .app-sider__brand-mark img {
+  filter: invert(1);
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  border-bottom: 1px solid #e1e4ed;
+}
+
+.app-header__waves {
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: -1;
+  width: min(50%, 620px);
+  pointer-events: none;
+}
+
+.app-header__waves--left {
+  inset: 0 auto 0 0;
+  transform: scaleX(-1);
+}
+
+.app-header__waves::before,
+.app-header__waves::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+}
+
+.app-header__waves::before {
+  background:
+    repeating-radial-gradient(ellipse at 64% 120%, transparent 0 10px, rgba(var(--header-wave-color), 0.1) 11px 12px),
+    linear-gradient(105deg, transparent, rgba(var(--header-wave-color), 0.19) 58%, transparent);
+  clip-path: polygon(0 100%, 11% 89%, 23% 77%, 31% 65%, 38% 47%, 44% 29%, 51% 17%, 58% 11%, 65% 12%, 72% 21%, 79% 36%, 86% 51%, 93% 56%, 100% 52%, 100% 100%);
+}
+
+.app-header__waves::after {
+  background: linear-gradient(100deg, transparent 15%, rgba(var(--header-wave-color), 0.19) 55%, transparent);
+  clip-path: polygon(13% 100%, 27% 90%, 37% 76%, 46% 62%, 54% 57%, 62% 60%, 70% 70%, 80% 84%, 91% 95%, 100% 100%);
+}
+
+.app-header__avatar {
+  background: #ffffff !important;
+  color: #1c2541 !important;
+  border: 1px solid #e1e4ed;
+  font-weight: 700;
+  font-size: 18px !important;
+}
+
+.app-header__actions {
+  gap: 12px;
+}
+
+.app-header__user {
+  line-height: 1.25;
+}
+
+.app-header__user .ant-typography {
+  font-size: 15px;
+}
+
+.app-header__user .ant-typography-secondary {
+  font-size: 13px;
+}
+
+.app-header__logout {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.app-content {
+  position: relative;
+  isolation: isolate;
+  padding: 24px 28px 40px;
+}
+
+.app-content::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgba(28, 37, 65, 0.2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  content: '';
+}
+
+.app-content[data-sidebar-menu-open='true']::after {
+  opacity: 1;
+}
+
+:root[data-color-mode='dark'] .app-content::after {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.app-content__inner {
+  max-width: 1320px;
+  margin: 0 auto;
+  animation: page-in 0.35s ease both;
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Sayfa başlığı + kart görünümü */
+.page-header {
+  margin-bottom: 20px;
+}
+
+.page-header h2 {
+  margin: 0 !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em;
+}
+
+.page-header__subtitle {
+  color: #4a536b;
+}
+
+.page-card {
+  border: 1px solid #e1e4ed !important;
+  box-shadow: 0 1px 3px rgba(28, 37, 65, 0.05);
+}
+
+/* Tablo başlıkları tek satırda kalsın */
+.page-card .ant-table-thead > tr > th {
+  white-space: nowrap;
+  font-weight: 600 !important;
+}
+
+.row-overdue > td {
+  background: #fffafa;
+}
+
+/* Yumuşak etiketler (durum/öncelik) */
+.soft-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 22px;
+  white-space: nowrap;
+}
+
+:root[data-color-mode='dark'] .work-order-priority {
+  filter: invert(1);
+}
+
+@media (max-width: 640px) {
+  .app-content {
+    padding: 16px;
+  }
+  .app-header {
+    padding: 0 16px !important;
+  }
+  .app-header__actions {
+    gap: 4px;
+  }
+  .app-header__user {
+    display: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-content::after {
+    transition: none;
+  }
+
+  .app-content__inner {
+    animation: none;
+  }
+}
+
+.page-header h2 {
+  color: #1a2036 !important;
+}
+
+/* Aktif menüdeki sayı rozeti */
+.menu-badge {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 8px;
+  background: #e5e3fa;
+  color: #3b3486;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.app-sider-popup .ant-menu {
+  width: 244px;
+  max-width: calc(100vw - 100px);
+}
+
+.app-sider-popup .ant-menu-item-group-title {
+  padding: 12px 18px 6px;
+  color: var(--lilac-accent);
+  font-weight: 700;
+}
+
+.app-sider-popup .ant-menu-item {
+  border-inline-start: 3px solid color-mix(in srgb, var(--lilac-accent) 42%, transparent);
+}
+
+.app-sider-popup .ant-menu-item:not(.ant-menu-item-selected) {
+  background-color: color-mix(in srgb, var(--lilac-accent) 7%, transparent);
+}
+
+.app-sider-popup .ant-menu-item:not(.ant-menu-item-selected):hover {
+  background-color: color-mix(in srgb, var(--lilac-accent) 12%, transparent);
+}
+
+.app-sider-popup__link {
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+  vertical-align: middle;
+}
+
+.app-sider-popup__icon {
+  display: inline-flex;
+  flex: 0 0 18px;
+  justify-content: center;
+}
