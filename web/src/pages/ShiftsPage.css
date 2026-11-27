@@ -1,0 +1,146 @@
+.shift-board {
+  overflow-x: auto;
+  border: 1px solid #e8ebf3;
+  border-radius: 12px;
+}
+
+.shift-board__grid {
+  display: grid;
+  grid-template-columns: 200px repeat(7, minmax(110px, 1fr));
+  min-width: 980px;
+}
+
+.shift-board__row {
+  display: contents;
+}
+
+.shift-board__corner,
+.shift-board__day {
+  position: sticky;
+  top: 0;
+  padding: 12px;
+  background: #f8fafd;
+  border-bottom: 1px solid #e8ebf3;
+  font-size: 12px;
+  color: #5b6478;
+}
+
+.shift-board__corner {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+}
+
+.shift-board__day {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  border-left: 1px solid #eef0f6;
+  text-transform: capitalize;
+}
+
+.shift-board__day strong {
+  font-size: 18px;
+  color: #0b1533;
+}
+
+.shift-board__day.is-today strong {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #1c2541;
+  color: #fff;
+  font-size: 15px;
+}
+
+.shift-board__person {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef0f6;
+  min-height: 64px;
+}
+
+.shift-board__person a {
+  font-weight: 600;
+}
+
+.shift-board__person span {
+  font-size: 12px;
+  color: #8a92a6;
+}
+
+.shift-board__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border-left: 1px solid #eef0f6;
+  border-bottom: 1px solid #eef0f6;
+  transition: background 0.15s ease;
+}
+
+.shift-board__cell:hover {
+  background: #fafbff;
+}
+
+.shift-board__cell.is-today {
+  background: rgba(110, 91, 239, 0.04);
+}
+
+.shift-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-left: 3px solid var(--lilac-accent);
+  border-radius: 6px;
+  background: #f2effe;
+  color: #1c2541;
+  font: inherit;
+  text-align: left;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.shift-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px -4px rgba(110, 91, 239, 0.45);
+}
+
+.shift-chip--night {
+  border-left-color: #1c2541;
+  background: #e8e9f0;
+}
+
+.shift-chip__time {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.shift-chip__time sup {
+  margin-left: 2px;
+  color: #8a92a6;
+}
+
+.shift-chip__note {
+  overflow: hidden;
+  font-size: 11px;
+  color: #5b6478;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.shift-board__hint {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #8a92a6;
+}
