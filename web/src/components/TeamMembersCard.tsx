@@ -1,9 +1,11 @@
+import { UserAddOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Card, Popconfirm, Table, Tooltip, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { removeTeamMember } from '../api/teams.api';
+import { useAuth } from '../auth/AuthContext';
 import type { TeamDetail } from '../types/team';
 import type { WorkforceUser } from '../types/workforce-user';
 import { formatPhone } from '../utils/phone';
@@ -16,6 +18,7 @@ type Props = {
 
 export default function TeamMembersCard({ team, loading }: Props) {
   const { members } = team;
+  const { canManage } = useAuth(); // üye ekleme/çıkarma sadece yetkili rollerde
   const queryClient = useQueryClient();
   const [addModalOpen, setAddModalOpen] = useState(false);
 
@@ -50,9 +53,13 @@ export default function TeamMembersCard({ team, loading }: Props) {
       key: 'phone',
       render: (phone: string | null) => formatPhone(phone),
     },
-    {
+  ];
+
+  if (canManage)
+    columns.push({
       title: 'İşlemler',
       key: 'actions',
+      width: 110,
       render: (_, record) => (
         <Popconfirm
           title="Personeli ekipten çıkarmak istediğinize emin misiniz?"
@@ -70,24 +77,27 @@ export default function TeamMembersCard({ team, loading }: Props) {
           </Button>
         </Popconfirm>
       ),
-    },
-  ];
+    });
 
   return (
     <Card
       title={`Üyeler (${members.length})`}
-      style={{ marginTop: 24 }}
+      className="page-card"
+      style={{ marginTop: 20 }}
       extra={
-        // Pasif ekipte buton devre dışı; üzerine gelince nedeni görünür
-        <Tooltip title={team.isActive ? undefined : 'Pasif bir ekibe üye eklenemez'}>
-          <Button
-            type="primary"
-            disabled={!team.isActive}
-            onClick={() => setAddModalOpen(true)}
-          >
-            Üye Ekle
-          </Button>
-        </Tooltip>
+        canManage && (
+          // Pasif ekipte buton devre dışı; üzerine gelince nedeni görünür
+          <Tooltip title={team.isActive ? undefined : 'Pasif bir ekibe üye eklenemez'}>
+            <Button
+              type="primary"
+              icon={<UserAddOutlined />}
+              disabled={!team.isActive}
+              onClick={() => setAddModalOpen(true)}
+            >
+              Üye Ekle
+            </Button>
+          </Tooltip>
+        )
       }
     >
       <Table<WorkforceUser>
@@ -99,11 +109,9 @@ export default function TeamMembersCard({ team, loading }: Props) {
         locale={{ emptyText: 'Bu ekipte henüz üye yok' }}
       />
 
-      <AddTeamMemberModal
-        open={addModalOpen}
-        team={team}
-        onClose={() => setAddModalOpen(false)}
-      />
+      {canManage && (
+        <AddTeamMemberModal open={addModalOpen} team={team} onClose={() => setAddModalOpen(false)} />
+      )}
     </Card>
   );
 }

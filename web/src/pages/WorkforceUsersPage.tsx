@@ -1,11 +1,15 @@
+import { DeleteOutlined, EditOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
-import { Button, Flex, Input, Modal, Popconfirm, Select, Space, Switch, Table, Typography, message } from 'antd';
+import { Avatar, Button, Card, Flex, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Tooltip, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { deleteWorkforceUser, listWorkforceUsers, updateWorkforceUser } from '../api/workforce-users.api';
-import type { WorkforceUser } from '../types/workforce-user';
+import { useAuth } from '../auth/AuthContext';
+import PageHeader from '../components/PageHeader';
+import StatusTag from '../components/StatusTag';
 import WorkforceUserFormModal from '../components/WorkforceUserFormModal';
+import type { WorkforceUser } from '../types/workforce-user';
 import { formatPhone } from '../utils/phone';
 
 type StatusFilter = 'all' | 'active' | 'inactive';
@@ -16,77 +20,108 @@ const statusToIsActive = (status: StatusFilter): boolean | undefined => {
   return undefined; // 'all': filtre yok
 };
 
-const getColumns = (
-  onEdit: (user: WorkforceUser) => void,
-  onDelete: (user: WorkforceUser) => void,
-  onToggle: (user: WorkforceUser, checked: boolean) => void,
-  isToggling: (user: WorkforceUser) => boolean,
-): ColumnsType<WorkforceUser> => [
-  {
-    title: 'Sicil No',
-    dataIndex: 'registrationNumber',
-    key: 'registrationNumber',
-  },
+type ColumnHandlers = {
+  canManage: boolean; // false ise düzenle/sil/aktif-pasif gösterilmez (F8)
+  onEdit: (user: WorkforceUser) => void;
+  onDelete: (user: WorkforceUser) => void;
+  onToggle: (user: WorkforceUser, checked: boolean) => void;
+  isToggling: (user: WorkforceUser) => boolean;
+};
+
+const initials = (user: WorkforceUser) =>
+  `${user.firstname.charAt(0)}${user.lastname.charAt(0)}`.toLocaleUpperCase('tr-TR');
+
+const getColumns = ({ canManage, onEdit, onDelete, onToggle, isToggling }: ColumnHandlers): ColumnsType<WorkforceUser> => [
   {
     title: 'Ad Soyad',
     key: 'fullName',
     render: (_, record) => (
-      <Link to={`/workforce-users/${record.id}`}>
-        {record.firstname} {record.lastname}
-      </Link>
+      <Flex align="center" gap={10}>
+        <Avatar size="small" style={{ background: '#ECEBFA', color: 'var(--lilac-accent)', fontWeight: 700, fontSize: 11 }}>
+          {initials(record)}
+        </Avatar>
+        <Link to={`/workforce-users/${record.id}`} style={{ fontWeight: 600 }}>
+          {record.firstname} {record.lastname}
+        </Link>
+      </Flex>
     ),
+  },
+  {
+    title: 'Sicil No',
+    dataIndex: 'registrationNumber',
+    key: 'registrationNumber',
+    width: 130,
   },
   {
     title: 'Telefon',
     dataIndex: 'phone',
     key: 'phone',
+    width: 150,
     render: (phone: string | null) => formatPhone(phone),
   },
   {
     title: 'Ekip',
     key: 'team',
     render: (_, record) =>
-      record.team ? <Link to={`/teams/${record.team.id}`}>{record.team.name}</Link> : '-',
+      record.team ? (
+        <Link to={`/teams/${record.team.id}`}>
+          <Tag color="geekblue" bordered={false} style={{ cursor: 'pointer' }}>
+            {record.team.name}
+          </Tag>
+        </Link>
+      ) : (
+        '-'
+      ),
   },
   {
     title: 'Durum',
     dataIndex: 'isActive',
     key: 'isActive',
-    render: (isActive: boolean, record) => (
-      <Switch
-        checked={isActive}
-        checkedChildren="Aktif"
-        unCheckedChildren="Pasif"
-        loading={isToggling(record)}
-        onChange={(checked) => onToggle(record, checked)}
-      />
-    ),
+    width: 120,
+    render: (isActive: boolean, record) =>
+      canManage ? (
+        <Switch
+          checked={isActive}
+          checkedChildren="Aktif"
+          unCheckedChildren="Pasif"
+          loading={isToggling(record)}
+          onChange={(checked) => onToggle(record, checked)}
+        />
+      ) : (
+        <StatusTag isActive={isActive} />
+      ),
   },
-  {
-    title: 'İşlemler',
-    key: 'actions',
-    render: (_, record) => (
-      <Space>
-        <Button size="small" onClick={() => onEdit(record)}>
-          Düzenle
-        </Button>
-        <Popconfirm
-          title="Personeli silmek istediğinize emin misiniz?"
-          okText="Evet, Sil"
-          cancelText="Vazgeç"
-          okButtonProps={{ danger: true }}
-          onConfirm={() => onDelete(record)}
-        >
-          <Button size="small" danger>
-            Sil
-          </Button>
-        </Popconfirm>
-      </Space>
-    ),
-  },
+  ...(canManage
+    ? [
+        {
+          title: 'İşlemler',
+          key: 'actions',
+          width: 110,
+          render: (_: unknown, record: WorkforceUser) => (
+            <Space>
+              <Tooltip title="Düzenle">
+                <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(record)} />
+              </Tooltip>
+              <Popconfirm
+                title="Personeli silmek istediğinize emin misiniz?"
+                okText="Evet, Sil"
+                cancelText="Vazgeç"
+                okButtonProps={{ danger: true }}
+                onConfirm={() => onDelete(record)}
+              >
+                <Tooltip title="Sil">
+                  <Button size="small" danger icon={<DeleteOutlined />} />
+                </Tooltip>
+              </Popconfirm>
+            </Space>
+          ),
+        },
+      ]
+    : []),
 ];
 
 export default function WorkforceUsersPage() {
+  const { canManage } = useAuth();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [status, setStatus] = useState<StatusFilter>('all');
@@ -137,8 +172,7 @@ export default function WorkforceUsersPage() {
   });
 
   const toggleMutation = useMutation({
-    mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) =>
-      updateWorkforceUser(id, { isActive }),
+    mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) => updateWorkforceUser(id, { isActive }),
     onSuccess: () => {
       message.success('Personel durumu güncellendi');
       queryClient.invalidateQueries({ queryKey: ['workforce-users'] });
@@ -147,81 +181,92 @@ export default function WorkforceUsersPage() {
 
   return (
     <>
-      <Flex justify="space-between" align="center" style={{ marginBottom: 16 }}>
-        <Typography.Title level={2} style={{ margin: 0 }}>
-          Personeller
-        </Typography.Title>
-        <Button
-          type="primary"
-          onClick={() => {
-            setEditingUser(null);
-            setModalOpen(true);
-          }}
-        >
-          Yeni Personel
-        </Button>
-      </Flex>
+      <PageHeader
+        title="Personeller"
+        subtitle={data ? `Toplam ${data.total} personel` : 'Personelleri görüntüleyin ve yönetin'}
+        extra={
+          canManage && (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                setEditingUser(null);
+                setModalOpen(true);
+              }}
+            >
+              Yeni Personel
+            </Button>
+          )
+        }
+      />
 
-      <Space style={{ marginBottom: 16 }}>
-        <Input
-          allowClear
-          placeholder="Personel adı ara..."
-          style={{ width: 240 }}
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-        />
-        <Select<StatusFilter>
-          value={status}
-          style={{ width: 140 }}
-          options={[
-            { value: 'all', label: 'Tümü' },
-            { value: 'active', label: 'Aktif' },
-            { value: 'inactive', label: 'Pasif' },
-          ]}
-          onChange={(value) => {
-            setStatus(value);
-            setPage(1);
-          }}
-        />
-      </Space>
-
-      <Table<WorkforceUser>
-        rowKey="id"
-        columns={getColumns(
-          (user) => {
-            setEditingUser(user);
-            setModalOpen(true);
-          },
-          (user) => deleteMutation.mutate(user),
-          (user, checked) => toggleMutation.mutate({ id: user.id, isActive: checked }),
-          (user) => toggleMutation.isPending && toggleMutation.variables?.id === user.id,
-        )}
-        dataSource={data?.data}
-        loading={isFetching}
-        locale={{ emptyText: 'Kayıt bulunamadı' }}
-        pagination={{
-          current: page,
-          pageSize,
-          total: data?.total ?? 0,
-          showSizeChanger: true,
-          pageSizeOptions: [10, 20, 50],
-          onChange: (newPage, newPageSize) => {
-            if (newPageSize !== pageSize) {
-              setPageSize(newPageSize);
+      <Card className="page-card">
+        <Space wrap style={{ marginBottom: 16 }}>
+          <Input
+            allowClear
+            prefix={<SearchOutlined style={{ color: '#9aa3b5' }} />}
+            placeholder="Personel adı ara..."
+            style={{ width: 260 }}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+          <Select<StatusFilter>
+            value={status}
+            style={{ width: 140 }}
+            options={[
+              { value: 'all', label: 'Tümü' },
+              { value: 'active', label: 'Aktif' },
+              { value: 'inactive', label: 'Pasif' },
+            ]}
+            onChange={(value) => {
+              setStatus(value);
               setPage(1);
-            } else {
-              setPage(newPage);
-            }
-          },
-        }}
-      />
+            }}
+          />
+        </Space>
 
-      <WorkforceUserFormModal
-        open={modalOpen}
-        workforceUser={editingUser}
-        onClose={() => setModalOpen(false)}
-        onCreated={() => setPage(1)}
-      />
+        <Table<WorkforceUser>
+          rowKey="id"
+          scroll={{ x: 820 }}
+          columns={getColumns({
+            canManage,
+            onEdit: (user) => {
+              setEditingUser(user);
+              setModalOpen(true);
+            },
+            onDelete: (user) => deleteMutation.mutate(user),
+            onToggle: (user, checked) => toggleMutation.mutate({ id: user.id, isActive: checked }),
+            isToggling: (user) => toggleMutation.isPending && toggleMutation.variables?.id === user.id,
+          })}
+          dataSource={data?.data}
+          loading={isFetching}
+          locale={{ emptyText: 'Kayıt bulunamadı' }}
+          pagination={{
+            current: page,
+            pageSize,
+            total: data?.total ?? 0,
+            showSizeChanger: true,
+            pageSizeOptions: [10, 20, 50],
+            onChange: (newPage, newPageSize) => {
+              if (newPageSize !== pageSize) {
+                setPageSize(newPageSize);
+                setPage(1);
+              } else {
+                setPage(newPage);
+              }
+            },
+          }}
+        />
+      </Card>
+
+      {canManage && (
+        <WorkforceUserFormModal
+          open={modalOpen}
+          workforceUser={editingUser}
+          onClose={() => setModalOpen(false)}
+          onCreated={() => setPage(1)}
+        />
+      )}
     </>
   );
 }
