@@ -1,0 +1,229 @@
+/* KPI kartı */
+.kpi {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 100%;
+  padding: 18px 18px;
+  border: 1px solid #e1e4ed;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(30, 35, 64, 0.05);
+}
+
+.kpi__icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  font-size: 22px;
+}
+
+.kpi__icon--lavender {
+  background: #ecebfa;
+  color: var(--lilac-accent);
+}
+
+.kpi__icon--danger {
+  background: #fde8e8;
+  color: #e05252;
+}
+
+:root[data-color-mode='dark'] .kpi__icon--danger {
+  filter: invert(1);
+}
+
+.kpi__icon--navy {
+  background: #1c2541;
+  color: #fff;
+}
+
+.kpi__title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 15px;
+  font-weight: 500;
+  color: #4a536b;
+}
+
+.kpi__value {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: #1a2036;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.kpi__value-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.kpi__badge {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.kpi__badge--neutral {
+  background: #e6e8f5;
+  color: #3b4883;
+}
+
+.kpi__badge--danger {
+  background: #fde8e8;
+  color: #c03b3b;
+}
+
+.kpi__badge--success {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+/* Ekip durumu */
+.team-status {
+  display: grid;
+  gap: 18px;
+}
+
+.team-status__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.team-status__icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #ecebfa;
+  color: var(--lilac-accent);
+  font-size: 18px;
+}
+
+.team-status__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.team-status__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.team-status__name {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #1a2036;
+}
+
+.team-status__pct {
+  margin-left: auto;
+  font-weight: 700;
+  color: #1a2036;
+  font-variant-numeric: tabular-nums;
+}
+
+.team-status__track {
+  height: 8px;
+  border-radius: 4px;
+  background: #e1e4ed;
+  overflow: hidden;
+}
+
+.team-status__fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--lilac-detail);
+  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Haftalık grafik */
+.wchart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.wchart__legend {
+  display: flex;
+  gap: 18px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #4a536b;
+}
+
+.wchart__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wchart__legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.wchart__grid {
+  stroke: #eef0f5;
+  stroke-width: 1;
+}
+
+.wchart__axis {
+  stroke: #e1e4ed;
+  stroke-width: 1;
+}
+
+.wchart__tick,
+.wchart__label {
+  font-size: 12px;
+  fill: #6b7280;
+  font-variant-numeric: tabular-nums;
+}
+
+.wchart__label {
+  font-size: 13px;
+  fill: #4a536b;
+}
+
+.wchart__hover {
+  fill: #f7f8fc;
+}
+
+.dash-card .ant-card-head-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.wchart__value {
+  font-size: 11px;
+  font-weight: 600;
+  fill: #4a536b;
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-card .ant-card-head-title {
+  color: #1a2036;
+}

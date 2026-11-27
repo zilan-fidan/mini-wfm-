@@ -1,0 +1,44 @@
+.suggestions {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.suggestion {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #e8ebf3;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.suggestion:hover {
+  border-color: #c4bafb;
+}
+
+.suggestion.is-selected {
+  border-color: var(--lilac-accent);
+  box-shadow: 0 0 0 3px rgba(110, 91, 239, 0.12);
+}
+
+.suggestion__name {
+  font-weight: 600;
+}
+
+.suggestion__score {
+  font-weight: 700;
+  color: var(--lilac-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.suggestion__breakdown {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #6b7389;
+}
