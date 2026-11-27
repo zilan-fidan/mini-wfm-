@@ -1,0 +1,40 @@
+.kpi-card .ant-card-body {
+  padding: 16px 20px;
+}
+
+.kpi-card .ant-statistic-content {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell-zero {
+  color: #c2c8d6;
+}
+
+.hours-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hours-bar__track {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: #eef0f6;
+  overflow: hidden;
+}
+
+.hours-bar__fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--lilac-detail);
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.hours-bar__value {
+  min-width: 56px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #1f2937;
+}
