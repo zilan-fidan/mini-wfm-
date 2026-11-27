@@ -1,30 +1,16 @@
-import { LockOutlined, LoginOutlined, UserOutlined } from '@ant-design/icons';
+import { EnvironmentFilled, LockOutlined, LoginOutlined, UserOutlined } from '@ant-design/icons';
 import { Alert, Button, Form, Input } from 'antd';
-import { useState, type CSSProperties } from 'react';
-import { useLocation } from 'react-router';
+import { useState } from 'react';
 import { extractErrorMessage } from '../api/http';
+import departingVan from '../assets/login-departing-van.webp';
+import serviceVan from '../assets/login-service-van.webp';
 import { useAuth } from '../auth/AuthContext';
-import type { RedirectState } from '../auth/RequireAuth';
 import BrandMark from '../components/BrandMark';
 import type { LoginPayload } from '../types/auth';
 import './LoginPage.css';
 
-// Animasyonlu vardiya panosu: her satır bir ekip, her çubuk bir vardiya (başlangıç/uzunluk % olarak)
-const HOURS = ['06', '09', '12', '15', '18', '21', '00'];
-const BOARD_ROWS: { team: string; shifts: { start: number; length: number; tone: string }[] }[] = [
-  { team: 'Saha A', shifts: [{ start: 0, length: 34, tone: 'blue' }, { start: 52, length: 30, tone: 'amber' }] },
-  { team: 'Saha B', shifts: [{ start: 14, length: 40, tone: 'teal' }] },
-  { team: 'Bakım', shifts: [{ start: 6, length: 22, tone: 'amber' }, { start: 40, length: 26, tone: 'blue' }] },
-  { team: 'Destek', shifts: [{ start: 30, length: 46, tone: 'coral' }] },
-  { team: 'Gece', shifts: [{ start: 66, length: 34, tone: 'teal' }] },
-];
-
-const FEATURES = ['Vardiya planlama', 'Ekip rotasyonu', 'İş emri takibi'];
-
 export default function LoginPage() {
   const { login } = useAuth();
-  const location = useLocation();
-  const redirectedFrom = (location.state as RedirectState | null)?.from;
 
   const [form] = Form.useForm<LoginPayload>();
   const [submitting, setSubmitting] = useState(false);
@@ -48,11 +34,22 @@ export default function LoginPage() {
   return (
     <div className="login">
       {/* Sol: marka ve animasyon paneli */}
-      <section className="login__showcase" aria-hidden="true">
-        <div className="login__grid" />
-        <div className="login__orb login__orb--one" />
-        <div className="login__orb login__orb--two" />
-        <div className="login__orb login__orb--three" />
+      <section className="login__showcase" aria-label="Mini WFM saha operasyonları">
+        <div className="login-scene" aria-hidden="true">
+          <div className="login-scene__route-light login-scene__route-light--upper" />
+          <div className="login-scene__route-light login-scene__route-light--lower" />
+
+          <div className="login-scene__vehicle login-scene__vehicle--upper">
+            <img src={departingVan} alt="" />
+          </div>
+          <div className="login-scene__vehicle login-scene__vehicle--lower">
+            <img src={serviceVan} alt="" />
+          </div>
+
+          <div className="login-scene__pin login-scene__pin--warehouse"><EnvironmentFilled /></div>
+          <div className="login-scene__pin login-scene__pin--depot"><EnvironmentFilled /></div>
+          <div className="login-scene__pin login-scene__pin--transformer"><EnvironmentFilled /></div>
+        </div>
 
         <div className="login__brand">
           <BrandMark size={44} animated />
@@ -66,54 +63,6 @@ export default function LoginPage() {
           </h1>
           <p>Planlayın, atayın, takip edin. Saha operasyonlarınız her an kontrol altında.</p>
         </div>
-
-        <div className="board">
-          <div className="board__head">
-            <span className="board__title">Bugünkü vardiyalar</span>
-            <span className="board__live">
-              <i /> Canlı
-            </span>
-          </div>
-          <div className="board__hours">
-            <span />
-            {HOURS.map((h) => (
-              <span key={h}>{h}</span>
-            ))}
-          </div>
-          <div className="board__body">
-            {BOARD_ROWS.map((row, rowIndex) => (
-              <div className="board__row" key={row.team}>
-                <span className="board__team">{row.team}</span>
-                <div className="board__track">
-                  {row.shifts.map((shift, i) => (
-                    <span
-                      key={i}
-                      className={`board__shift board__shift--${shift.tone}`}
-                      style={
-                        {
-                          left: `${shift.start}%`,
-                          width: `${shift.length}%`,
-                          '--delay': `${0.35 + rowIndex * 0.12 + i * 0.18}s`,
-                        } as CSSProperties
-                      }
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-            <div className="board__now">
-              <span />
-            </div>
-          </div>
-        </div>
-
-        <ul className="login__features">
-          {FEATURES.map((f, i) => (
-            <li key={f} style={{ '--delay': `${1.2 + i * 0.15}s` } as CSSProperties}>
-              {f}
-            </li>
-          ))}
-        </ul>
       </section>
 
       {/* Sağ: giriş formu */}
@@ -126,15 +75,6 @@ export default function LoginPage() {
 
           <h2 className="login__title">Tekrar hoş geldiniz</h2>
           <p className="login__subtitle">Devam etmek için hesabınızla giriş yapın.</p>
-
-          {redirectedFrom && !error && (
-            <Alert
-              className="login__alert"
-              type="info"
-              showIcon
-              message="Bu sayfayı görüntülemek için giriş yapmalısınız."
-            />
-          )}
 
           {error && (
             <Alert
